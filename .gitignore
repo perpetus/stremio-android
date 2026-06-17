@@ -1,0 +1,30 @@
+# Built artifacts
+build/
+/*/build/
+
+# Gradle files
+.gradle/
+
+# Local configuration
+local.properties
+
+# Android Studio / IntelliJ IDEA configuration files
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Kotlin compiler cache
+.kotlin/
+
+# Log files
+*.log
+
+# Generated JNI libraries (built dynamically by cargo/gradle tasks)
+**/jniLibs/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini

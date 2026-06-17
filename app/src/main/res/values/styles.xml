@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.StremioMobile" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/stremio_background</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/stremio_background</item>
+        <item name="android:statusBarColor">@color/stremio_background</item>
+    </style>
+
+    <style name="Theme.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_stremio_splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.StremioMobile</item>
+    </style>
+</resources>

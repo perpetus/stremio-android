@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Stremio</string>
+    <string name="server_notification_channel">Streaming Server</string>
+    <string name="server_notification_title">Stremio</string>
+    <string name="server_notification_text">Preparing native mobile shell</string>
+</resources>

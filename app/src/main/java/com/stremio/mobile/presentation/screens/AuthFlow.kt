@@ -1,0 +1,457 @@
+package com.stremio.mobile.presentation.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.stremio.mobile.core.theme.AccentPurple
+import com.stremio.mobile.core.theme.MutedText
+import com.stremio.mobile.core.theme.StremioBackground
+import com.stremio.mobile.presentation.components.StremioMark
+
+enum class AuthScreen {
+    Intro,
+    Login,
+    Signup,
+}
+
+@Composable
+fun AuthFlow(
+    isLoading: Boolean,
+    error: String?,
+    onLogin: (String, String) -> Unit,
+    onSignup: (String, String, Boolean) -> Unit,
+    onClearError: () -> Unit,
+) {
+    var screen by rememberSaveable { mutableStateOf(AuthScreen.Intro) }
+
+    when (screen) {
+        AuthScreen.Intro -> IntroScreen(
+            onLoginClicked = {
+                onClearError()
+                screen = AuthScreen.Login
+            },
+            onSignupClicked = {
+                onClearError()
+                screen = AuthScreen.Signup
+            },
+        )
+
+        AuthScreen.Login -> LoginScreen(
+            isLoading = isLoading,
+            error = error,
+            onBack = {
+                onClearError()
+                screen = AuthScreen.Intro
+            },
+            onSubmit = onLogin,
+            onSignup = {
+                onClearError()
+                screen = AuthScreen.Signup
+            },
+        )
+
+        AuthScreen.Signup -> SignupScreen(
+            isLoading = isLoading,
+            error = error,
+            onBack = {
+                onClearError()
+                screen = AuthScreen.Intro
+            },
+            onSubmit = onSignup,
+            onLogin = {
+                onClearError()
+                screen = AuthScreen.Login
+            },
+        )
+    }
+}
+
+@Composable
+private fun IntroScreen(
+    onLoginClicked: () -> Unit,
+    onSignupClicked: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colorStops = arrayOf(
+                        0.0f to Color(0xFF7D58F4),
+                        0.18f to Color(0xFF403075),
+                        0.42f to StremioBackground,
+                        1.0f to StremioBackground,
+                    ),
+                ),
+            )
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(horizontal = 31.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.Center),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(22.dp),
+            ) {
+                StremioMark(modifier = Modifier.size(58.dp))
+                Text(
+                    text = "stremio",
+                    color = Color.White,
+                    fontSize = 38.sp,
+                    fontWeight = FontWeight.Normal,
+                )
+            }
+            Spacer(modifier = Modifier.height(68.dp))
+            Text(
+                text = "Freedom to Stream",
+                color = Color.White,
+                fontSize = 35.sp,
+                lineHeight = 40.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "All the video content you enjoy in one place",
+                color = Color(0xFFD7D0F0),
+                fontSize = 18.sp,
+                lineHeight = 24.sp,
+            )
+            Spacer(modifier = Modifier.height(34.dp))
+            AuthButton(text = "Sign up", onClick = onSignupClicked)
+            AuthButton(
+                text = "Continue with Facebook",
+                containerColor = Color(0xFF126FFF),
+                onClick = {},
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "Already have an account?",
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                color = Color(0xFF8E869F),
+                fontSize = 18.sp,
+            )
+            Button(
+                onClick = onLoginClicked,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+            ) {
+                Text(
+                    text = "Log in",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoginScreen(
+    isLoading: Boolean,
+    error: String?,
+    onBack: () -> Unit,
+    onSubmit: (String, String) -> Unit,
+    onSignup: () -> Unit,
+) {
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+
+    AuthFormScaffold(
+        title = "Log in",
+        subtitle = "Use your Stremio account to sync your library, addons, and continue watching.",
+        isLoading = isLoading,
+        error = error,
+        onBack = onBack,
+    ) {
+        AuthTextField(value = email, onValueChange = { email = it }, label = "Email")
+        AuthTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = "Password",
+            isPassword = true,
+        )
+        AuthButton(
+            text = if (isLoading) "Logging in..." else "Log in",
+            enabled = !isLoading,
+            onClick = { onSubmit(email, password) },
+        )
+        TextLink(
+            text = "Don't have an account? Sign up",
+            onClick = onSignup,
+        )
+    }
+}
+
+@Composable
+private fun SignupScreen(
+    isLoading: Boolean,
+    error: String?,
+    onBack: () -> Unit,
+    onSubmit: (String, String, Boolean) -> Unit,
+    onLogin: () -> Unit,
+) {
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var passwordConfirm by rememberSaveable { mutableStateOf("") }
+    var acceptedTerms by rememberSaveable { mutableStateOf(false) }
+    var acceptedPrivacy by rememberSaveable { mutableStateOf(false) }
+    var marketing by rememberSaveable { mutableStateOf(false) }
+    var localError by rememberSaveable { mutableStateOf<String?>(null) }
+
+    AuthFormScaffold(
+        title = "Sign up",
+        subtitle = "Create a Stremio account to keep your library and addon setup available on every device.",
+        isLoading = isLoading,
+        error = localError ?: error,
+        onBack = onBack,
+    ) {
+        AuthTextField(value = email, onValueChange = { email = it }, label = "Email")
+        AuthTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = "Password",
+            isPassword = true,
+        )
+        AuthTextField(
+            value = passwordConfirm,
+            onValueChange = { passwordConfirm = it },
+            label = "Confirm password",
+            isPassword = true,
+        )
+        AuthCheckRow(
+            checked = acceptedTerms,
+            text = "I accept the Terms of Service",
+            onCheckedChange = { acceptedTerms = it },
+        )
+        AuthCheckRow(
+            checked = acceptedPrivacy,
+            text = "I accept the Privacy Policy",
+            onCheckedChange = { acceptedPrivacy = it },
+        )
+        AuthCheckRow(
+            checked = marketing,
+            text = "Receive product updates by email",
+            onCheckedChange = { marketing = it },
+        )
+        AuthButton(
+            text = if (isLoading) "Creating account..." else "Sign up",
+            enabled = !isLoading,
+            onClick = {
+                localError = when {
+                    password != passwordConfirm -> "Passwords do not match"
+                    !acceptedTerms -> "You must accept the Terms of Service"
+                    !acceptedPrivacy -> "You must accept the Privacy Policy"
+                    else -> null
+                }
+                if (localError == null) {
+                    onSubmit(email, password, marketing)
+                }
+            },
+        )
+        TextLink(
+            text = "Already have an account? Log in",
+            onClick = onLogin,
+        )
+    }
+}
+
+@Composable
+private fun AuthFormScaffold(
+    title: String,
+    subtitle: String,
+    isLoading: Boolean,
+    error: String?,
+    onBack: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(horizontal = 26.dp),
+        contentPadding = PaddingValues(top = 30.dp, bottom = 30.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item {
+            TextLink(text = "Back", onClick = onBack)
+            Spacer(modifier = Modifier.height(42.dp))
+            StremioMark(modifier = Modifier.size(46.dp))
+            Spacer(modifier = Modifier.height(34.dp))
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 34.sp,
+                lineHeight = 40.sp,
+                fontWeight = FontWeight.ExtraBold,
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = subtitle,
+                color = MutedText,
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
+            )
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                content()
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .size(28.dp),
+                        color = AccentPurple,
+                    )
+                }
+                if (error != null) {
+                    Text(
+                        text = error,
+                        color = Color(0xFFFFC66D),
+                        fontSize = 14.sp,
+                        lineHeight = 19.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuthTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    isPassword: Boolean = false,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        singleLine = true,
+        visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        shape = RoundedCornerShape(12.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White,
+            focusedBorderColor = AccentPurple,
+            unfocusedBorderColor = Color(0xFF555160),
+            focusedLabelColor = MutedText,
+            unfocusedLabelColor = MutedText,
+            cursorColor = AccentPurple,
+        ),
+    )
+}
+
+@Composable
+private fun AuthCheckRow(
+    checked: Boolean,
+    text: String,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = CheckboxDefaults.colors(
+                checkedColor = AccentPurple,
+                uncheckedColor = MutedText,
+                checkmarkColor = Color.White,
+            ),
+        )
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 14.sp,
+        )
+    }
+}
+
+@Composable
+fun AuthButton(
+    text: String,
+    containerColor: Color = AccentPurple,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp),
+        shape = RoundedCornerShape(30.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = containerColor,
+            contentColor = Color.White,
+            disabledContainerColor = containerColor.copy(alpha = 0.55f),
+            disabledContentColor = Color.White.copy(alpha = 0.7f),
+        ),
+    ) {
+        Text(
+            text = text,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+private fun TextLink(
+    text: String,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = text,
+        modifier = Modifier.clickable(onClick = onClick),
+        color = Color.White,
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Bold,
+    )
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="stremio_background">#101216</color>
+    <color name="ic_launcher_background">#100f1f</color>
+    <color name="splash_background">#0c0b11</color>
+</resources>
