@@ -6,6 +6,16 @@ GitHub Repository: [stremio-android](https://github.com/perpetus/stremio-android
 
 It integrates a high-performance, local streaming server powered by the Rust-based [stream-server](https://github.com/perpetus/stream-server).
 
+> [!WARNING]
+> This application is currently in its **testing phase**. Bugs, performance anomalies, and unimplemented features are expected at this stage.
+
+## Screenshot
+
+<p align="center">
+  <img src="screenshot.png" alt="Stremio Android App Screenshot" width="360"/>
+</p>
+
+
 ## Project Structure
 
 * **`app`**: The Android application module containing the Jetpack Compose UI, player components (Media3/ExoPlayer), ViewModels, and screens.
