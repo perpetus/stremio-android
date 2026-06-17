@@ -1,0 +1,6 @@
+[submodule "streamio-core-kotlin"]
+	path = streamio-core-kotlin
+	url = https://github.com/perpetus/stremio-core-kotlin.git
+[submodule "stream-server"]
+	path = stream-server
+	url = https://github.com/perpetus/stream-server.git
