@@ -5,11 +5,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.stremio.mobile.core.theme.MutedText
+import com.stremio.mobile.player.LanguageCatalog
+import com.stremio.mobile.player.PlayerEngine
 
 @Composable
 fun PlayerSettingsScreen(
@@ -24,25 +28,12 @@ fun PlayerSettingsScreen(
         SettingsHeader(title = "Player Settings", onBack = onBack)
 
         if (settings != null) {
-            val languages = listOf(
-                "eng" to "English",
-                "spa" to "Spanish",
-                "fre" to "French",
-                "ger" to "German",
-                "ita" to "Italian",
-                "por" to "Portuguese",
-                "rus" to "Russian",
-                "zho" to "Chinese"
-            )
-
-            val subtitleSizes = listOf(
-                50 to "50% (Very Small)",
-                75 to "75% (Small)",
-                100 to "100% (Normal)",
-                120 to "120% (Medium)",
-                150 to "150% (Large)",
-                200 to "200% (Extra Large)"
-            )
+            val context = LocalContext.current
+            val languages = remember(context) { LanguageCatalog.options(context) }
+            val subtitleLanguages = remember(languages) {
+                listOf<Pair<String?, String>>(null to "None") + languages.map { (code, label) -> code to label }
+            }
+            val subtitleSizes = LanguageCatalog.subtitleSizes.map { it to "$it%" }
 
             val seekDurations = listOf(
                 5000L to "5 seconds",
@@ -76,6 +67,19 @@ fun PlayerSettingsScreen(
                 30000L to "30 seconds"
             )
 
+            val playerEngines = listOf(
+                PlayerEngine.EXO.profileValue to "ExoPlayer",
+                PlayerEngine.MPV.profileValue to "MPV",
+            )
+
+            SettingsDropdownRow(
+                title = "Internal Player",
+                selectedValue = PlayerEngine.fromProfileValue(settings.playerType).profileValue,
+                options = playerEngines,
+                onSelect = { onUpdateSettings(settings.copy(playerType = it)) },
+                description = "Applies to the next stream."
+            )
+
             Text(
                 text = "SUBTITLES",
                 color = MutedText,
@@ -93,8 +97,8 @@ fun PlayerSettingsScreen(
 
             SettingsDropdownRow(
                 title = "Default Subtitle Language",
-                selectedValue = settings.subtitlesLanguage ?: "eng",
-                options = languages,
+                selectedValue = settings.subtitlesLanguage,
+                options = subtitleLanguages,
                 onSelect = { onUpdateSettings(settings.copy(subtitlesLanguage = it)) }
             )
 
@@ -124,6 +128,13 @@ fun PlayerSettingsScreen(
                 selectedValue = settings.subtitlesOutlineColor,
                 options = colors,
                 onSelect = { onUpdateSettings(settings.copy(subtitlesOutlineColor = it)) }
+            )
+
+            SettingsToggleRow(
+                title = "ASS subtitles styling",
+                checked = settings.assSubtitlesStyling,
+                onCheckedChange = { onUpdateSettings(settings.copy(assSubtitlesStyling = it)) },
+                description = "Use subtitle-provided ASS styling when available"
             )
 
             Text(
@@ -206,6 +217,7 @@ fun PlayerSettingsScreen(
                 onSelect = { onUpdateSettings(settings.copy(nextVideoNotificationDuration = it)) },
                 description = "Overlay duration prompting you to play next episode"
             )
+
         }
     }
 }

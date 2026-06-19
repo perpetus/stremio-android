@@ -87,7 +87,9 @@ class BoardRepository(private val core: StremioCore) {
                 imdbRating = null,
                 progress = progressVal,
                 watched = item.watched,
-                remainingEpisodes = item.remainingEpisodes
+                remainingEpisodes = item.remainingEpisodes,
+                continueWatchingVideoId = item.state.videoId,
+                isContinueWatching = true,
             )
         }
         return CatalogShelf(

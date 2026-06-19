@@ -1,6 +1,8 @@
 package com.stremio.mobile.presentation.state
 
 import com.stremio.mobile.data.model.CatalogShelf
+import com.stremio.mobile.data.model.LiquidGlassTuning
+import com.stremio.mobile.data.model.LIQUID_GLASS_RECOMMENDED_GLOBAL_ALPHA
 import com.stremio.mobile.data.model.MetaDetails
 import com.stremio.mobile.server.StreamingServerState
 
@@ -19,6 +21,17 @@ data class MainUiState(
     val searchShelves: List<CatalogShelf> = emptyList(),
     val library: CatalogShelf = CatalogShelf(title = "Library", isLoading = false),
     val addons: AddonsUiState = AddonsUiState(),
+    val selectedAddonDetails: AddonDetailsUiState? = null,
+    val nextVideo: com.stremio.core.types.resource.Video? = null,
+    val showNextVideoPopup: Boolean = false,
+    val minSeedsThreshold: Int = 1,
+    val minDownloadSpeedBps: Long = 50_000L,
+    val preferredQuality: String = "Any",
+    val globalUiStyle: String = "classic",
+    val glassEffectsMode: String = "balanced",
+    val isAutoSwitchOnDeadStream: Boolean = false,
+    val showNoSeedsBanner: Boolean = false,
+    val noSeedsReason: String? = null,
     val selectedDetails: MetaDetails? = null,
     val continueWatching: CatalogShelf = CatalogShelf(title = "Continue Watching"),
     val boardShelves: List<CatalogShelf> = emptyList(),
@@ -37,4 +50,9 @@ data class MainUiState(
     val isKeepScreenOn: Boolean = true,
     val isSeedingEnabled: Boolean = true,
     val isSearchOpen: Boolean = false,
+    val globalGlassAlpha: Float = LIQUID_GLASS_RECOMMENDED_GLOBAL_ALPHA,
+    val adaptiveGlassContrast: Boolean = true,
+    val glassHapticsEnabled: Boolean = true,
+    val hapticsIntensity: String = "Medium",
+    val liquidGlassTuning: LiquidGlassTuning = LiquidGlassTuning(),
 )

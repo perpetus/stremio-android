@@ -33,6 +33,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,15 +48,25 @@ import com.stremio.mobile.core.theme.MutedText
 import com.stremio.mobile.core.theme.StremioBackgroundBrush
 import com.stremio.mobile.data.model.EpisodeOption
 import com.stremio.mobile.data.model.StreamOption
+import com.stremio.mobile.data.model.StreamSortCriterion
+import com.stremio.mobile.data.model.parseSeedCount
+import com.stremio.mobile.data.model.parseSizeBytes
+import com.stremio.mobile.data.model.qualityScore
+import com.stremio.mobile.presentation.components.ThemedCard
+import com.stremio.mobile.presentation.components.ThemedChip
+import com.stremio.mobile.presentation.components.ThemedIconButton
 import com.stremio.mobile.presentation.state.StreamsUiState
 
 @Composable
 fun StreamsSheet(
     state: StreamsUiState,
+    preferredQuality: String,
     onBack: () -> Unit,
     onSelect: (StreamOption) -> Unit,
     onSelectEpisode: (EpisodeOption) -> Unit,
     onSelectSeason: (Int) -> Unit,
+    onSelectProvider: (String?) -> Unit,
+    onSelectSortCriterion: (StreamSortCriterion) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -71,16 +82,13 @@ fun StreamsSheet(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
+            ThemedIconButton(
                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = "Back",
-                tint = Color.White,
+                onClick = onBack,
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(GlassSurface)
-                    .clickable(onClick = onBack)
-                    .padding(9.dp),
+                    .size(40.dp),
+                containerColor = GlassSurface,
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -101,6 +109,15 @@ fun StreamsSheet(
                         fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
+                    )
+                }
+                state.releaseDateLabel?.takeIf { it.isNotBlank() }?.let { releaseDate ->
+                    Text(
+                        text = "Released $releaseDate",
+                        color = MutedText,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -154,13 +171,9 @@ fun StreamsSheet(
                     ) {
                         items(state.seasons) { season ->
                             val selected = season == state.selectedSeason
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(99.dp))
-                                    .background(if (selected) AccentPurple else GlassSurface)
-                                    .clickable { onSelectSeason(season) }
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                contentAlignment = Alignment.Center
+                            ThemedChip(
+                                selected = selected,
+                                onClick = { onSelectSeason(season) },
                             ) {
                                 Text(
                                     text = "Season $season",
@@ -211,6 +224,44 @@ fun StreamsSheet(
                         )
                     }
                 } else {
+                    val providers = remember(state.streams) { state.streams.map { it.addonTitle }.distinct() }
+                    val visibleStreams = remember(state.streams, state.selectedProvider, state.sortCriterion, preferredQuality) {
+                        state.streams
+                            .filter { state.selectedProvider == null || it.addonTitle == state.selectedProvider }
+                            .let { filtered ->
+                                when (state.sortCriterion) {
+                                    StreamSortCriterion.DEFAULT -> filtered
+                                    StreamSortCriterion.SEEDS -> filtered.sortedByDescending { parseSeedCount(it.seeds) }
+                                    StreamSortCriterion.SIZE -> filtered.sortedByDescending { parseSizeBytes(it.size) }
+                                    StreamSortCriterion.QUALITY -> filtered.sortedByDescending { qualityScore(it.quality, preferredQuality) }
+                                }
+                            }
+                    }
+
+                    if (providers.size > 1 || state.sortCriterion != StreamSortCriterion.DEFAULT) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (providers.size > 1) {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    item {
+                                        FilterChip(label = "All", selected = state.selectedProvider == null, onClick = { onSelectProvider(null) })
+                                    }
+                                    items(providers) { provider ->
+                                        FilterChip(label = provider, selected = state.selectedProvider == provider, onClick = { onSelectProvider(provider) })
+                                    }
+                                }
+                            }
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(StreamSortCriterion.entries.toList()) { criterion ->
+                                    FilterChip(
+                                        label = "Sort: ${criterion.label}",
+                                        selected = state.sortCriterion == criterion,
+                                        onClick = { onSelectSortCriterion(criterion) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     LazyColumn(
                         contentPadding = PaddingValues(bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -218,7 +269,7 @@ fun StreamsSheet(
                             .fillMaxWidth()
                             .weight(1f)
                     ) {
-                        items(state.streams, key = { it.key }) { option ->
+                        items(visibleStreams, key = { it.key }) { option ->
                             StreamRow(
                                 option = option,
                                 enabled = !state.isResolving,
@@ -237,15 +288,18 @@ private fun EpisodeRow(
     episode: EpisodeOption,
     onClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (episode.isCurrent) Color(0xFF2A2042) else GlassSurface)
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    ThemedCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 14.dp,
     ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(if (episode.isCurrent) Color(0x332A2042) else Color.Transparent)
+                .clickable(onClick = onClick)
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
         // Episode number badge
         Box(
             modifier = Modifier
@@ -277,13 +331,14 @@ private fun EpisodeRow(
                 fontSize = 12.sp,
             )
         }
-        if (episode.watched) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(AccentPurple)
-            )
+            if (episode.watched) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(AccentPurple)
+                )
+            }
         }
     }
 }
@@ -294,15 +349,17 @@ private fun StreamRow(
     enabled: Boolean,
     onSelect: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(GlassSurface)
-            .clickable(enabled = enabled, onClick = onSelect)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    ThemedCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 16.dp,
     ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onSelect)
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
         Box(
             modifier = Modifier
                 .size(40.dp)
@@ -451,5 +508,25 @@ private fun StreamRow(
                 )
             }
         }
+    }
+}
+}
+
+@Composable
+private fun FilterChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    ThemedChip(
+        selected = selected,
+        onClick = onClick,
+    ) {
+        Text(
+            text = label,
+            color = if (selected) Color.White else MutedText,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+        )
     }
 }

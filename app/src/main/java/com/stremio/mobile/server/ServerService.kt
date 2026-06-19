@@ -17,18 +17,20 @@ class ServerService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureNotificationChannel()
-
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.server_notification_title))
-            .setContentText(getString(R.string.server_notification_text))
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setOngoing(true)
-            .build()
-
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundServiceType())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val useForeground = intent?.getBooleanExtra(EXTRA_FOREGROUND, true) ?: true
+        if (useForeground) {
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle(getString(R.string.server_notification_title))
+                .setContentText(getString(R.string.server_notification_text))
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setOngoing(true)
+                .build()
+
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundServiceType())
+        }
         return START_STICKY
     }
 
@@ -59,8 +61,10 @@ class ServerService : Service() {
         }
     }
 
-    private companion object {
-        const val CHANNEL_ID = "streaming_server"
-        const val NOTIFICATION_ID = 11470
+    companion object {
+        const val EXTRA_FOREGROUND = "com.stremio.mobile.server.EXTRA_FOREGROUND"
+        private const val CHANNEL_ID = "streaming_server"
+        private const val NOTIFICATION_ID = 11470
     }
 }
+

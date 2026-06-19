@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,6 +42,8 @@ import com.stremio.mobile.core.theme.AccentPurple
 import com.stremio.mobile.core.theme.MutedText
 import com.stremio.mobile.core.theme.StremioBackground
 import com.stremio.mobile.presentation.components.StremioMark
+import com.stremio.mobile.presentation.components.ThemedButton
+import com.stremio.mobile.presentation.components.ThemedTextButton
 
 enum class AuthScreen {
     Intro,
@@ -170,18 +170,11 @@ private fun IntroScreen(
                 color = Color(0xFF8E869F),
                 fontSize = 18.sp,
             )
-            Button(
+            ThemedTextButton(
+                text = "Log in",
                 onClick = onLoginClicked,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-            ) {
-                Text(
-                    text = "Log in",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            )
         }
     }
 }
@@ -420,26 +413,15 @@ fun AuthButton(
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    Button(
+    ThemedButton(
+        text = text,
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier
             .fillMaxWidth()
             .height(58.dp),
-        shape = RoundedCornerShape(30.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = containerColor,
-            contentColor = Color.White,
-            disabledContainerColor = containerColor.copy(alpha = 0.55f),
-            disabledContentColor = Color.White.copy(alpha = 0.7f),
-        ),
-    ) {
-        Text(
-            text = text,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Bold,
-        )
-    }
+        containerColor = containerColor,
+    )
 }
 
 @Composable

@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.OpenInNew
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +29,9 @@ import androidx.compose.ui.unit.sp
 import com.stremio.mobile.core.theme.AccentPurple
 import com.stremio.mobile.core.theme.GlassSurface
 import com.stremio.mobile.core.theme.MutedText
+import com.stremio.mobile.presentation.components.ThemedCard
+import com.stremio.mobile.presentation.components.ThemedButton
+import com.stremio.mobile.presentation.components.rememberGlobalHapticFeedback
 
 @Composable
 fun GeneralSettingsScreen(
@@ -57,65 +58,62 @@ fun GeneralSettingsScreen(
         )
 
         // Trakt.tv Integration Row
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(GlassSurface)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ThemedCard(
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = 16.dp
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Trakt Integration",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = if (isTraktAuthenticated) "Authenticated" else "Not Authenticated",
+                        color = if (isTraktAuthenticated) Color(0xFF4CAF50) else MutedText,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 Text(
-                    text = "Trakt Integration",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
+                    text = "Sync what you watch on Stremio directly to your Trakt profile history and watchlist.",
+                    color = MutedText,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
                 )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = if (isTraktAuthenticated) "Authenticated" else "Not Authenticated",
-                    color = if (isTraktAuthenticated) Color(0xFF4CAF50) else MutedText,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-            Text(
-                text = "Sync what you watch on Stremio directly to your Trakt profile history and watchlist.",
-                color = MutedText,
-                fontSize = 12.sp,
-                lineHeight = 16.sp
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (isTraktAuthenticated) {
-                    Button(
-                        onClick = onLogoutTrakt,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Log Out Trakt", color = Color.White)
-                    }
-                    Button(
-                        onClick = onInstallTraktAddon,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentPurple),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Install Addon", color = Color.White)
-                    }
-                } else {
-                    Button(
-                        onClick = { onAuthenticateTrakt(context) },
-                        enabled = isAuthenticated,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentPurple),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Authenticate Trakt", color = Color.White)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (isTraktAuthenticated) {
+                        ThemedButton(
+                            text = "Log Out Trakt",
+                            onClick = onLogoutTrakt,
+                            containerColor = Color(0xFFD32F2F),
+                            modifier = Modifier.weight(1f)
+                        )
+                        ThemedButton(
+                            text = "Install Addon",
+                            onClick = onInstallTraktAddon,
+                            containerColor = AccentPurple,
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        ThemedButton(
+                            text = "Authenticate Trakt",
+                            onClick = { onAuthenticateTrakt(context) },
+                            enabled = isAuthenticated,
+                            containerColor = AccentPurple,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
@@ -145,30 +143,35 @@ private fun SettingsLinkRow(
     url: String
 ) {
     val context = LocalContext.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(GlassSurface)
-            .clickable {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                context.startActivity(intent)
-            }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+    val triggerHaptic = rememberGlobalHapticFeedback()
+    ThemedCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 16.dp
     ) {
-        Text(
-            text = title,
-            color = Color.White,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-        )
-        Icon(
-            imageVector = Icons.Outlined.OpenInNew,
-            contentDescription = null,
-            tint = MutedText,
-            modifier = Modifier.size(20.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    triggerHaptic()
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    context.startActivity(intent)
+                }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+                contentDescription = null,
+                tint = MutedText,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }

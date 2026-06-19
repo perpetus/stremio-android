@@ -6,6 +6,7 @@ data class EpisodeOption(
     val episode: Int,
     val title: String,
     val thumbnail: String?,
+    val releaseDate: String?,
     val watched: Boolean,
     val isCurrent: Boolean,
 )

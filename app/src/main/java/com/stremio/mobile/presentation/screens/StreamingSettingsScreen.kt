@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +23,8 @@ import androidx.compose.ui.unit.sp
 import com.stremio.mobile.core.theme.AccentPurple
 import com.stremio.mobile.core.theme.GlassSurface
 import com.stremio.mobile.core.theme.MutedText
+import com.stremio.mobile.presentation.components.ThemedButton
+import com.stremio.mobile.presentation.components.ThemedCard
 import com.stremio.mobile.server.StreamingServerState
 
 @Composable
@@ -34,11 +34,19 @@ fun StreamingSettingsScreen(
     isPingLoading: Boolean,
     serverSettings: com.stremio.core.models.StreamingServer.Settings?,
     isSeedingEnabled: Boolean,
+    minSeedsThreshold: Int,
+    minDownloadSpeedBps: Long,
+    preferredQuality: String,
+    isAutoSwitchOnDeadStream: Boolean,
     onStartServer: () -> Unit,
     onStopServer: () -> Unit,
     onCheckServer: () -> Unit,
     onUpdateServerSettings: (com.stremio.core.models.StreamingServer.Settings) -> Unit,
     onSetSeedingEnabled: (Boolean) -> Unit,
+    onSetMinSeedsThreshold: (Int) -> Unit,
+    onSetMinDownloadSpeedBps: (Long) -> Unit,
+    onSetPreferredQuality: (String) -> Unit,
+    onSetAutoSwitchOnDeadStream: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     Column(
@@ -48,126 +56,127 @@ fun StreamingSettingsScreen(
         SettingsHeader(title = "Streaming Server", onBack = onBack)
 
         // Status Card
-        Column(
+        ThemedCard(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(GlassSurface)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .fillMaxWidth(),
+            cornerRadius = 20.dp,
         ) {
-            Text(
-                text = "Server Status",
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-            )
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                val dotColor = when (serverState) {
-                    is StreamingServerState.Ready -> Color(0xFF4CAF50)
-                    is StreamingServerState.Starting -> Color(0xFFFFC107)
-                    is StreamingServerState.Stopped -> Color(0xFF9E9E9E)
-                    is StreamingServerState.Failed -> Color(0xFFF44336)
-                }
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(dotColor)
-                )
-
-                val statusText = when (serverState) {
-                    is StreamingServerState.Ready -> "Running"
-                    is StreamingServerState.Starting -> "Starting..."
-                    is StreamingServerState.Stopped -> "Stopped"
-                    is StreamingServerState.Failed -> "Failed: ${serverState.message}"
-                }
                 Text(
-                    text = "Status: $statusText",
+                    text = "Server Status",
                     color = Color.White,
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
                 )
-            }
 
-            if (serverState is StreamingServerState.Ready) {
-                Text(
-                    text = "URL: ${serverState.baseUrl}",
-                    color = MutedText,
-                    fontSize = 12.sp,
-                )
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "Connection: ",
-                    color = Color.White,
-                    fontSize = 14.sp,
-                )
-                val pingColor = when (serverPingStatus) {
-                    "Online" -> Color(0xFF4CAF50)
-                    "Checking..." -> Color(0xFFFFC107)
-                    "Not checked", "Server is not started" -> MutedText
-                    else -> Color(0xFFF44336)
-                }
-                Text(
-                    text = serverPingStatus,
-                    color = pingColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                val buttonText = when (serverState) {
-                    is StreamingServerState.Ready, is StreamingServerState.Starting -> "Stop Server"
-                    else -> "Start Server"
-                }
-                val buttonAction = when (serverState) {
-                    is StreamingServerState.Ready, is StreamingServerState.Starting -> onStopServer
-                    else -> onStartServer
-                }
-                val buttonColor = when (serverState) {
-                    is StreamingServerState.Ready, is StreamingServerState.Starting -> Color(0xFFD32F2F)
-                    else -> AccentPurple
-                }
-
-                Button(
-                    onClick = buttonAction,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(text = buttonText, color = Color.White)
+                    val dotColor = when (serverState) {
+                        is StreamingServerState.Ready -> Color(0xFF4CAF50)
+                        is StreamingServerState.Starting -> Color(0xFFFFC107)
+                        is StreamingServerState.Stopped -> Color(0xFF9E9E9E)
+                        is StreamingServerState.Failed -> Color(0xFFF44336)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(dotColor)
+                    )
+
+                    val statusText = when (serverState) {
+                        is StreamingServerState.Ready -> "Running"
+                        is StreamingServerState.Starting -> "Starting..."
+                        is StreamingServerState.Stopped -> "Stopped"
+                        is StreamingServerState.Failed -> "Failed: ${serverState.message}"
+                    }
+                    Text(
+                        text = "Status: $statusText",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                    )
                 }
 
-                Button(
-                    onClick = onCheckServer,
-                    enabled = serverState is StreamingServerState.Ready,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E2E3E)),
+                if (serverState is StreamingServerState.Ready) {
+                    Text(
+                        text = "URL: ${serverState.baseUrl}",
+                        color = MutedText,
+                        fontSize = 12.sp,
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (isPingLoading) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text(
-                            text = "Test Connection",
-                            color = if (serverState is StreamingServerState.Ready) Color.White else MutedText
-                        )
+                    Text(
+                        text = "Connection: ",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                    )
+                    val pingColor = when (serverPingStatus) {
+                        "Online" -> Color(0xFF4CAF50)
+                        "Checking..." -> Color(0xFFFFC107)
+                        "Not checked", "Server is not started" -> MutedText
+                        else -> Color(0xFFF44336)
+                    }
+                    Text(
+                        text = serverPingStatus,
+                        color = pingColor,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val buttonText = when (serverState) {
+                        is StreamingServerState.Ready, is StreamingServerState.Starting -> "Stop Server"
+                        else -> "Start Server"
+                    }
+                    val buttonAction = when (serverState) {
+                        is StreamingServerState.Ready, is StreamingServerState.Starting -> onStopServer
+                        else -> onStartServer
+                    }
+                    val buttonColor = when (serverState) {
+                        is StreamingServerState.Ready, is StreamingServerState.Starting -> Color(0xFFD32F2F)
+                        else -> AccentPurple
+                    }
+
+                    ThemedButton(
+                        text = buttonText,
+                        onClick = buttonAction,
+                        modifier = Modifier.weight(1f),
+                        containerColor = buttonColor,
+                    )
+
+                    ThemedButton(
+                        onClick = onCheckServer,
+                        enabled = serverState is StreamingServerState.Ready,
+                        modifier = Modifier.weight(1f),
+                        containerColor = Color(0xFF2E2E3E),
+                    ) {
+                        if (isPingLoading) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(
+                                text = "Test Connection",
+                                color = if (serverState is StreamingServerState.Ready) Color.White else MutedText
+                            )
+                        }
                     }
                 }
             }
@@ -242,5 +251,60 @@ fun StreamingSettingsScreen(
                 description = "Continue seeding torrents in background after download finishes"
             )
         }
+
+        Text(
+            text = "STREAM HEALTH",
+            color = MutedText,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+        )
+
+        val minSeedsOptions = listOf(0 to "Any", 1 to "1", 2 to "2", 3 to "3", 5 to "5")
+        val minSpeedOptions = listOf(
+            0L to "Disabled",
+            25_000L to "25 KB/s",
+            50_000L to "50 KB/s",
+            100_000L to "100 KB/s",
+            200_000L to "200 KB/s",
+        )
+        val qualityOptions = listOf(
+            "Any" to "Any",
+            "2160p" to "4K",
+            "1080p" to "1080p",
+            "720p" to "720p",
+            "480p" to "480p",
+        )
+
+        SettingsDropdownRow(
+            title = "Minimum Seeds",
+            selectedValue = minSeedsThreshold,
+            options = minSeedsOptions,
+            onSelect = onSetMinSeedsThreshold,
+            description = "Flag a playing stream as dead when it has fewer peers than this"
+        )
+
+        SettingsDropdownRow(
+            title = "Minimum Download Speed",
+            selectedValue = minDownloadSpeedBps,
+            options = minSpeedOptions,
+            onSelect = onSetMinDownloadSpeedBps,
+            description = "Flag a playing stream as too slow below this throughput"
+        )
+
+        SettingsDropdownRow(
+            title = "Preferred Video Quality",
+            selectedValue = preferredQuality,
+            options = qualityOptions,
+            onSelect = onSetPreferredQuality,
+            description = "Used to break ties when sorting streams or picking a fallback"
+        )
+
+        SettingsToggleRow(
+            title = "Auto-Switch on Dead Stream",
+            checked = isAutoSwitchOnDeadStream,
+            onCheckedChange = onSetAutoSwitchOnDeadStream,
+            description = "Automatically play the next best stream instead of asking"
+        )
     }
 }

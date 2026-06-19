@@ -4,9 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import com.stremio.mobile.core.StremioCore
+import com.stremio.mobile.data.model.LIQUID_GLASS_RECOMMENDED_GLOBAL_ALPHA
+import com.stremio.mobile.data.model.LocalStreamSelection
+import com.stremio.mobile.data.model.LiquidGlassTuning
+import com.stremio.mobile.data.model.StreamOption
 import com.stremio.mobile.presentation.state.AccountUiState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import org.json.JSONObject
 
 class AuthRepository(
     private val core: StremioCore,
@@ -70,6 +75,143 @@ class AuthRepository(
     fun isKeepScreenOn(): Boolean = preferences.getBoolean("keep_screen_on", true)
     fun setKeepScreenOn(enabled: Boolean) {
         preferences.edit().putBoolean("keep_screen_on", enabled).apply()
+    }
+
+    fun getMinSeedsThreshold(): Int = preferences.getInt("min_seeds_threshold", 1)
+    fun setMinSeedsThreshold(value: Int) {
+        preferences.edit().putInt("min_seeds_threshold", value).apply()
+    }
+
+    fun getMinDownloadSpeedBps(): Long = preferences.getLong("min_download_speed_bps", 50_000L)
+    fun setMinDownloadSpeedBps(value: Long) {
+        preferences.edit().putLong("min_download_speed_bps", value).apply()
+    }
+
+    fun getPreferredQuality(): String = preferences.getString("preferred_quality", "Any") ?: "Any"
+    fun setPreferredQuality(value: String) {
+        preferences.edit().putString("preferred_quality", value).apply()
+    }
+
+    fun rememberLocalStreamSelection(itemType: String, itemId: String, videoId: String?, option: StreamOption) {
+        val payload = JSONObject()
+            .put("key", option.key)
+            .put("addonTitle", option.addonTitle)
+            .put("name", option.name)
+            .put("description", option.description)
+            .put("quality", option.quality)
+
+        preferences.edit()
+            .putString(localStreamSelectionKey(itemType, itemId, videoId), payload.toString())
+            .apply()
+    }
+
+    fun getLocalStreamSelection(itemType: String, itemId: String, videoId: String?): LocalStreamSelection? {
+        val raw = preferences.getString(localStreamSelectionKey(itemType, itemId, videoId), null) ?: return null
+        return runCatching {
+            val payload = JSONObject(raw)
+            LocalStreamSelection(
+                key = payload.optString("key"),
+                addonTitle = payload.optString("addonTitle"),
+                name = payload.optString("name"),
+                description = payload.optNullableString("description"),
+                quality = payload.optNullableString("quality"),
+            )
+        }.getOrNull()
+    }
+
+    private fun localStreamSelectionKey(itemType: String, itemId: String, videoId: String?): String {
+        val normalizedVideoId = videoId?.takeIf { it.isNotBlank() } ?: itemId
+        return listOf("local_stream_selection", itemType, itemId, normalizedVideoId)
+            .joinToString(":") { Uri.encode(it) }
+    }
+
+    private fun JSONObject.optNullableString(name: String): String? {
+        return if (has(name) && !isNull(name)) optString(name) else null
+    }
+
+    fun getGlobalUiStyle(): String {
+        val value = preferences.getString("global_ui_style", null)
+            ?: preferences.getString("player_controls_style", null)
+        return when (value) {
+            "modern" -> "modern"
+            else -> "classic"
+        }
+    }
+    fun setGlobalUiStyle(value: String) {
+        preferences.edit().putString("global_ui_style", if (value == "modern") "modern" else "classic").apply()
+    }
+
+    fun getGlassEffectsMode(): String {
+        return when (preferences.getString("glass_effects_mode", "balanced")) {
+            "full" -> "full"
+            "static" -> "static"
+            else -> "balanced"
+        }
+    }
+    fun setGlassEffectsMode(value: String) {
+        val resolved = when (value) {
+            "full" -> "full"
+            "static" -> "static"
+            else -> "balanced"
+        }
+        preferences.edit().putString("glass_effects_mode", resolved).apply()
+    }
+
+    fun getGlobalGlassAlpha(): Float = preferences.getFloat("global_glass_alpha", LIQUID_GLASS_RECOMMENDED_GLOBAL_ALPHA)
+    fun setGlobalGlassAlpha(value: Float) {
+        preferences.edit().putFloat("global_glass_alpha", value).apply()
+    }
+
+    fun getGlassHapticsEnabled(): Boolean = preferences.getBoolean("glass_haptics_enabled", true)
+    fun setGlassHapticsEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean("glass_haptics_enabled", enabled).apply()
+    }
+
+    fun isAdaptiveGlassContrastEnabled(): Boolean = preferences.getBoolean("adaptive_glass_contrast", true)
+    fun setAdaptiveGlassContrastEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean("adaptive_glass_contrast", enabled).apply()
+    }
+
+    fun getHapticsIntensity(): String = preferences.getString("haptics_intensity", "Medium") ?: "Medium"
+    fun setHapticsIntensity(value: String) {
+        preferences.edit().putString("haptics_intensity", value).apply()
+    }
+
+    fun getLiquidGlassTuning(): LiquidGlassTuning {
+        val defaults = LiquidGlassTuning()
+        return LiquidGlassTuning(
+            blurDp = preferences.getFloat("glass_tuning_blur_dp", defaults.blurDp),
+            refractionHeightDp = preferences.getFloat("glass_tuning_refraction_height_dp", defaults.refractionHeightDp),
+            refractionAmountDp = preferences.getFloat("glass_tuning_refraction_amount_dp", defaults.refractionAmountDp),
+            surfaceAlpha = preferences.getFloat("glass_tuning_surface_alpha", defaults.surfaceAlpha),
+            highlightAlpha = preferences.getFloat("glass_tuning_highlight_alpha", defaults.highlightAlpha),
+            borderAlpha = preferences.getFloat("glass_tuning_border_alpha", defaults.borderAlpha),
+            shadowAlpha = preferences.getFloat("glass_tuning_shadow_alpha", defaults.shadowAlpha),
+            trackAlpha = preferences.getFloat("glass_tuning_track_alpha", defaults.trackAlpha),
+            thumbAlpha = preferences.getFloat("glass_tuning_thumb_alpha", defaults.thumbAlpha),
+            chromaticAberration = preferences.getBoolean("glass_tuning_chromatic_aberration", defaults.chromaticAberration),
+        ).clamped()
+    }
+
+    fun setLiquidGlassTuning(value: LiquidGlassTuning) {
+        val tuning = value.clamped()
+        preferences.edit()
+            .putFloat("glass_tuning_blur_dp", tuning.blurDp)
+            .putFloat("glass_tuning_refraction_height_dp", tuning.refractionHeightDp)
+            .putFloat("glass_tuning_refraction_amount_dp", tuning.refractionAmountDp)
+            .putFloat("glass_tuning_surface_alpha", tuning.surfaceAlpha)
+            .putFloat("glass_tuning_highlight_alpha", tuning.highlightAlpha)
+            .putFloat("glass_tuning_border_alpha", tuning.borderAlpha)
+            .putFloat("glass_tuning_shadow_alpha", tuning.shadowAlpha)
+            .putFloat("glass_tuning_track_alpha", tuning.trackAlpha)
+            .putFloat("glass_tuning_thumb_alpha", tuning.thumbAlpha)
+            .putBoolean("glass_tuning_chromatic_aberration", tuning.chromaticAberration)
+            .apply()
+    }
+
+    fun isAutoSwitchOnDeadStream(): Boolean = preferences.getBoolean("auto_switch_on_dead_stream", false)
+    fun setAutoSwitchOnDeadStream(enabled: Boolean) {
+        preferences.edit().putBoolean("auto_switch_on_dead_stream", enabled).apply()
     }
 
     fun isTraktAuthenticated(): Boolean {

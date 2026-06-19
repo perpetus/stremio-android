@@ -2,9 +2,7 @@ package com.stremio.mobile.data.repository
 
 import com.stremio.mobile.core.StremioCore
 import com.stremio.mobile.core.extensions.optNullableString
-import com.stremio.mobile.core.extensions.optStringArray
 import com.stremio.mobile.core.extensions.use
-import com.stremio.mobile.data.model.AddonItem
 import com.stremio.mobile.data.model.CatalogItem
 import com.stremio.mobile.data.model.CatalogShelf
 import kotlinx.coroutines.flow.Flow
@@ -141,34 +139,4 @@ class CatalogRepository(private val core: StremioCore) {
         }
     }
 
-    fun fetchAddons(endpoint: String): List<AddonItem> {
-        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 10_000
-            readTimeout = 10_000
-            setRequestProperty("Accept", "application/json")
-        }
-
-        return connection.use {
-            val body = it.inputStream.bufferedReader().use { reader -> reader.readText() }
-            val jsonAddons = JSONObject(body).getJSONArray("addons")
-            buildList {
-                for (index in 0 until jsonAddons.length()) {
-                    val addon = jsonAddons.getJSONObject(index)
-                    val manifest = addon.optJSONObject("manifest") ?: continue
-                    add(
-                        AddonItem(
-                            id = manifest.optString("id", addon.optString("transportUrl")),
-                            name = manifest.optString("name", "Unknown addon"),
-                            description = manifest.optNullableString("description"),
-                            logo = manifest.optNullableString("logo"),
-                            version = manifest.optNullableString("version"),
-                            types = manifest.optStringArray("types"),
-                            transportUrl = addon.optNullableString("transportUrl"),
-                        ),
-                    )
-                }
-            }
-        }
-    }
 }

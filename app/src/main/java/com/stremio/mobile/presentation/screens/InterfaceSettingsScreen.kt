@@ -5,12 +5,28 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.stremio.mobile.core.theme.MutedText
 
 @Composable
 fun InterfaceSettingsScreen(
     settings: com.stremio.core.types.profile.Profile.Settings?,
+    globalUiStyle: String,
+    glassEffectsMode: String,
+    globalGlassAlpha: Float,
+    adaptiveGlassContrast: Boolean,
+    glassHapticsEnabled: Boolean,
+    hapticsIntensity: String,
     onUpdateSettings: (com.stremio.core.types.profile.Profile.Settings) -> Unit,
+    onSetGlobalUiStyle: (String) -> Unit,
+    onSetGlassEffectsMode: (String) -> Unit,
+    onSetGlobalGlassAlpha: (Float) -> Unit,
+    onSetAdaptiveGlassContrastEnabled: (Boolean) -> Unit,
+    onSetGlassHapticsEnabled: (Boolean) -> Unit,
+    onSetHapticsIntensity: (String) -> Unit,
     onBack: () -> Unit
 ) {
     Column(
@@ -29,6 +45,82 @@ fun InterfaceSettingsScreen(
                 "por" to "Portuguese",
                 "rus" to "Russian",
                 "zho" to "Chinese"
+            )
+            val uiStyles = listOf(
+                "classic" to "Classic",
+                "modern" to "Modern (Liquid Glass)",
+            )
+            val glassEffects = listOf(
+                "balanced" to "Balanced",
+                "full" to "Full Blur",
+                "static" to "Performance",
+            )
+            val intensities = listOf(
+                "Light" to "Light",
+                "Medium" to "Medium",
+                "Heavy" to "Heavy",
+            )
+
+            Text(
+                text = "APPEARANCE",
+                color = MutedText,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+            )
+
+            SettingsDropdownRow(
+                title = "Global UI Style",
+                selectedValue = globalUiStyle,
+                options = uiStyles,
+                onSelect = onSetGlobalUiStyle,
+            )
+
+            SettingsDropdownRow(
+                title = "Glass Effects",
+                selectedValue = glassEffectsMode,
+                options = glassEffects,
+                onSelect = onSetGlassEffectsMode,
+                description = "Controls Liquid Glass performance and blur usage"
+            )
+
+            SettingsSliderRow(
+                title = "Glass Transparency",
+                value = globalGlassAlpha,
+                onValueChange = onSetGlobalGlassAlpha,
+                valueRange = 0f..0.6f,
+                description = "Adjust opacity of Liquid Glass surfaces"
+            )
+
+            SettingsToggleRow(
+                title = "Adaptive Glass Contrast",
+                checked = adaptiveGlassContrast,
+                onCheckedChange = onSetAdaptiveGlassContrastEnabled,
+                description = "Boosts tint, borders, and shadows over bright or busy content"
+            )
+
+            SettingsToggleRow(
+                title = "Haptic Feedback",
+                checked = glassHapticsEnabled,
+                onCheckedChange = onSetGlassHapticsEnabled,
+                description = "Enable tactile ticks on interactions"
+            )
+
+            if (glassHapticsEnabled) {
+                SettingsDropdownRow(
+                    title = "Haptic Intensity",
+                    selectedValue = hapticsIntensity,
+                    options = intensities,
+                    onSelect = onSetHapticsIntensity
+                )
+            }
+
+            Text(
+                text = "INTERFACE",
+                color = MutedText,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 4.dp, top = 8.dp)
             )
 
             SettingsDropdownRow(

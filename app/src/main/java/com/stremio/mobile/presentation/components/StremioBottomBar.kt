@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -48,14 +49,12 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kyant.backdrop.backdrops.LayerBackdrop
-import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.Shadow
 import com.stremio.mobile.core.theme.AccentPurple
-import com.stremio.mobile.core.theme.MutedText
 import com.stremio.mobile.presentation.navigation.AppView
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -63,30 +62,50 @@ import kotlin.math.roundToInt
 @Composable
 fun StremioBottomBar(
     selectedView: AppView,
-    backdrop: LayerBackdrop,
+    backdrop: LayerBackdrop?,
     onSelect: (AppView) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
+    val theme = LocalGlobalUiTheme.current
+    val tuning = theme.liquidGlassTuning.clamped()
+    val useRealGlass = theme.style == "modern" && theme.glassEffectsMode != "static" && backdrop != null
+    val legibility = if (theme.style == "modern" && theme.adaptiveGlassContrast) {
+        GlassLegibility.navigationBar()
+    } else {
+        GlassLegibility.Default
+    }
+    val barShape = RoundedCornerShape(30.dp)
+    val indicatorShape = RoundedCornerShape(999.dp)
+    val barSurfaceAlpha = (tuning.surfaceAlpha * legibility.surfaceAlphaBoost).coerceIn(0.08f, 0.90f)
+    val barBorderAlpha = (0.14f * legibility.borderAlphaBoost).coerceIn(0.08f, 0.44f)
+    val barShadowAlpha = (tuning.shadowAlpha * legibility.shadowAlphaBoost).coerceIn(0f, 0.70f)
+    val selectedTabColor = if (theme.style == "modern") legibility.foreground else Color.White
+    val unselectedTabColor = if (theme.style == "modern") legibility.mutedForeground else Color(0xFF9B96A8)
+    val selectedIconColor = if (theme.style == "modern" && theme.adaptiveGlassContrast) {
+        legibility.foreground
+    } else {
+        AccentPurple
+    }
 
-    // drag-reactive pointer tracking for highlight layer and liquid stretch
     var rawPointerOffset by remember { mutableStateOf(Offset.Unspecified) }
     var isBarPressed by remember { mutableStateOf(false) }
     var isDragging by remember { mutableStateOf(false) }
+    var settleDragSelection by remember { mutableStateOf(false) }
+    val hasPointer = rawPointerOffset != Offset.Unspecified
 
     val animatedPtrX by animateFloatAsState(
-        targetValue = if (rawPointerOffset != Offset.Unspecified) rawPointerOffset.x else Float.NaN,
+        targetValue = if (hasPointer) rawPointerOffset.x else 0f,
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
         label = "barPtrX",
     )
     val animatedPtrY by animateFloatAsState(
-        targetValue = if (rawPointerOffset != Offset.Unspecified) rawPointerOffset.y else Float.NaN,
+        targetValue = if (hasPointer) rawPointerOffset.y else 0f,
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
         label = "barPtrY",
     )
-    val barPointer = if (animatedPtrX.isNaN() || animatedPtrY.isNaN()) Offset.Unspecified
-    else Offset(animatedPtrX, animatedPtrY)
+    val barPointer = if (hasPointer) Offset(animatedPtrX, animatedPtrY) else Offset.Unspecified
 
     val barScale by animateFloatAsState(
         targetValue = if (isBarPressed) 0.98f else 1f,
@@ -101,24 +120,32 @@ fun StremioBottomBar(
             .navigationBarsPadding()
             .padding(bottom = 10.dp)
             .height(74.dp)
-            .pointerInput(Unit) {
+            .pointerInput(theme.hapticsEnabled) {
                 detectTapGestures(
                     onPress = { offset ->
                         rawPointerOffset = offset
                         isBarPressed = true
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        if (theme.hapticsEnabled) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
                         tryAwaitRelease()
                         isBarPressed = false
+                        if (!isDragging) {
+                            rawPointerOffset = Offset.Unspecified
+                        }
                     },
                 )
             }
-            .pointerInput(Unit) {
+            .pointerInput(theme.hapticsEnabled) {
                 detectDragGestures(
                     onDragStart = { offset ->
                         rawPointerOffset = offset
                         isBarPressed = true
                         isDragging = true
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        settleDragSelection = false
+                        if (theme.hapticsEnabled) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
                     },
                     onDrag = { change, _ ->
                         rawPointerOffset = change.position
@@ -126,11 +153,13 @@ fun StremioBottomBar(
                     onDragEnd = {
                         isBarPressed = false
                         isDragging = false
+                        settleDragSelection = true
                         rawPointerOffset = Offset.Unspecified
                     },
                     onDragCancel = {
                         isBarPressed = false
                         isDragging = false
+                        settleDragSelection = false
                         rawPointerOffset = Offset.Unspecified
                     },
                 )
@@ -141,24 +170,18 @@ fun StremioBottomBar(
         val horizontalPadding = 8.dp
         val tabWidth = (maxWidth - horizontalPadding * 2) / tabCount
 
-        // Track the last index we vibrated for during sliding
         var lastVibratedIndex by remember { mutableStateOf(selectedIndex) }
-
-        // Animatable indicator offset
         val indicatorOffset = remember { Animatable((horizontalPadding + tabWidth * selectedIndex).value) }
 
-        // Animate indicator offset when selected index changes (not during drag)
         LaunchedEffect(selectedIndex, isDragging) {
             if (!isDragging) {
-                val target = (horizontalPadding + tabWidth * selectedIndex).value
                 indicatorOffset.animateTo(
-                    targetValue = target,
-                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 430f)
+                    targetValue = (horizontalPadding + tabWidth * selectedIndex).value,
+                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 430f),
                 )
             }
         }
 
-        // Keep indicator following the finger during drag
         LaunchedEffect(rawPointerOffset, isDragging) {
             if (isDragging && rawPointerOffset != Offset.Unspecified) {
                 val pointerXDp = with(density) { rawPointerOffset.x.toDp() }
@@ -168,24 +191,17 @@ fun StremioBottomBar(
             }
         }
 
-        // When drag finishes, select the closest tab and spring to it
-        LaunchedEffect(isDragging) {
-            if (!isDragging && rawPointerOffset == Offset.Unspecified) {
+        LaunchedEffect(isDragging, settleDragSelection) {
+            if (!isDragging && settleDragSelection) {
                 val currentOffsetDp = indicatorOffset.value.dp
                 val nearestIndex = ((currentOffsetDp - horizontalPadding) / tabWidth)
                     .roundToInt()
                     .coerceIn(0, tabCount - 1)
                 onSelect(AppView.entries[nearestIndex])
-
-                val target = (horizontalPadding + tabWidth * nearestIndex).value
-                indicatorOffset.animateTo(
-                    targetValue = target,
-                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 430f)
-                )
+                settleDragSelection = false
             }
         }
 
-        // Track current nearest tab index and trigger haptics when crossing tab boundaries
         val currentOffsetDp = indicatorOffset.value.dp
         val nearestIndex = ((currentOffsetDp - horizontalPadding) / tabWidth)
             .roundToInt()
@@ -193,12 +209,13 @@ fun StremioBottomBar(
 
         LaunchedEffect(nearestIndex) {
             if (nearestIndex != lastVibratedIndex) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                if (theme.hapticsEnabled) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
                 lastVibratedIndex = nearestIndex
             }
         }
 
-        // Stretch and Lift Calculations
         val distanceX = remember(indicatorOffset.value, barPointer) {
             if (barPointer != Offset.Unspecified) {
                 val fingerXDp = with(density) { barPointer.x.toDp() }
@@ -220,87 +237,122 @@ fun StremioBottomBar(
             animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
             label = "indicatorStretch",
         )
-
         val scaleX = 1f + 0.12f * lift + stretch
         val scaleY = 1f + 0.08f * lift - stretch * 0.4f
 
-        // glass backdrop
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { RoundedCornerShape(30.dp) },
-                    effects = {
-                        vibrancy()
-                        blur(4.dp.toPx())
-                        lens(
-                            refractionHeight = 16.dp.toPx(),
-                            refractionAmount = 32.dp.toPx(),
-                            depthEffect = true,
-                            chromaticAberration = true,
-                        )
-                    },
-                    highlight = { Highlight.Ambient.copy(alpha = 0.75f) },
-                    shadow = {
-                        Shadow(
-                            radius = 28.dp,
-                            offset = DpOffset(0.dp, 8.dp),
-                            color = Color.Black.copy(alpha = 0.42f),
-                        )
-                    },
-                    onDrawSurface = {
-                        drawRoundRect(Color(0x85131220))
-                    },
-                )
-        )
-
-        // drag-reactive specular highlight
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clip(RoundedCornerShape(30.dp)),
-        ) {
-            GlassHighlightLayer(pointerOffset = barPointer)
+        if (useRealGlass) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .drawBackdropSafe(
+                        backdrop = backdrop,
+                        shape = { barShape },
+                        effects = {
+                            vibrancy()
+                            blur(tuning.blurDp.dp.toPx())
+                            lens(
+                                refractionHeight = tuning.refractionHeightDp.dp.toPx(),
+                                refractionAmount = tuning.refractionAmountDp.dp.toPx(),
+                                depthEffect = true,
+                                chromaticAberration = tuning.chromaticAberration,
+                            )
+                        },
+                        highlight = { Highlight.Ambient.copy(alpha = tuning.highlightAlpha) },
+                        shadow = {
+                            Shadow(
+                                radius = 28.dp,
+                                offset = DpOffset(0.dp, 8.dp),
+                                color = Color.Black.copy(alpha = barShadowAlpha),
+                            )
+                        },
+                        onDrawSurface = {
+                            if (legibility.scrimAlpha > 0f) {
+                                drawRoundRect(Color.Black.copy(alpha = legibility.scrimAlpha))
+                            }
+                            drawRoundRect(legibility.surfaceTint.copy(alpha = barSurfaceAlpha))
+                        },
+                    )
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(barShape)
+                    .background(
+                        if (theme.style == "modern") {
+                            legibility.surfaceTint.copy(alpha = (0.82f * legibility.surfaceAlphaBoost).coerceIn(0.56f, 0.94f))
+                        } else {
+                            Color(0xE0131220)
+                        }
+                    )
+                    .border(0.7.dp, Color.White.copy(alpha = barBorderAlpha), barShape)
+            )
         }
 
-        Box(
-            modifier = Modifier
-                .offset(x = indicatorOffset.value.dp, y = 7.dp)
-                .width(tabWidth)
-                .height(60.dp)
-                .graphicsLayer(
-                    scaleX = scaleX,
-                    scaleY = scaleY,
-                    transformOrigin = TransformOrigin.Center
-                )
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { RoundedCornerShape(999.dp) },
-                    effects = {
-                        vibrancy()
-                        blur(3.dp.toPx())
-                        lens(
-                            refractionHeight = 12.dp.toPx(),
-                            refractionAmount = 24.dp.toPx(),
-                            depthEffect = true,
-                            chromaticAberration = true,
-                        )
-                    },
-                    highlight = { Highlight.Default.copy(alpha = 0.35f + 0.15f * lift) },
-                    shadow = {
-                        Shadow(
-                            radius = (18f + 6f * lift).dp,
-                            offset = DpOffset(0.dp, 4.dp),
-                            color = AccentPurple.copy(alpha = 0.24f + 0.08f * lift),
-                        )
-                    },
-                    onDrawSurface = {
-                        val alpha = 0.20f + 0.15f * lift
-                        drawRoundRect(Color(0x326E55FF).copy(alpha = alpha))
-                    },
-                ),
-        )
+        if (useRealGlass) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(barShape),
+            ) {
+                GlassHighlightLayer(pointerOffset = barPointer)
+            }
+        }
+
+        if (useRealGlass) {
+            Box(
+                modifier = Modifier
+                    .offset(x = indicatorOffset.value.dp, y = 7.dp)
+                    .width(tabWidth)
+                    .height(60.dp)
+                    .graphicsLayer(
+                        scaleX = scaleX,
+                        scaleY = scaleY,
+                        transformOrigin = TransformOrigin.Center,
+                    )
+                    .drawBackdropSafe(
+                        backdrop = backdrop,
+                        shape = { indicatorShape },
+                        effects = {
+                            vibrancy()
+                            blur(tuning.blurDp.dp.toPx())
+                            lens(
+                                refractionHeight = tuning.refractionHeightDp.dp.toPx(),
+                                refractionAmount = tuning.refractionAmountDp.dp.toPx(),
+                                depthEffect = true,
+                                chromaticAberration = tuning.chromaticAberration,
+                            )
+                        },
+                        highlight = { Highlight.Default.copy(alpha = (tuning.highlightAlpha * (0.65f + 0.20f * lift)).coerceIn(0f, 1f)) },
+                        shadow = {
+                            Shadow(
+                                radius = (18f + 6f * lift).dp,
+                                offset = DpOffset(0.dp, 4.dp),
+                                color = AccentPurple.copy(alpha = (tuning.shadowAlpha * legibility.shadowAlphaBoost * (0.70f + 0.20f * lift)).coerceIn(0f, 1f)),
+                            )
+                        },
+                        onDrawSurface = {
+                            val alpha = (tuning.surfaceAlpha * (0.80f + 0.35f * lift) * legibility.surfaceAlphaBoost).coerceIn(0f, 0.86f)
+                            drawRoundRect(AccentPurple.copy(alpha = alpha))
+                        },
+                    ),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .offset(x = indicatorOffset.value.dp, y = 7.dp)
+                    .width(tabWidth)
+                    .height(60.dp)
+                    .graphicsLayer(
+                        scaleX = scaleX,
+                        scaleY = scaleY,
+                        transformOrigin = TransformOrigin.Center,
+                    )
+                    .clip(indicatorShape)
+                    .background(AccentPurple.copy(alpha = ((0.30f + 0.10f * lift) * legibility.surfaceAlphaBoost).coerceIn(0f, 0.62f)))
+                    .border(0.7.dp, AccentPurple.copy(alpha = (0.38f * legibility.borderAlphaBoost).coerceIn(0f, 0.82f)), indicatorShape)
+            )
+        }
 
         Row(
             modifier = Modifier
@@ -314,6 +366,9 @@ fun StremioBottomBar(
                     view = view,
                     selected = view == selectedView,
                     onClick = { onSelect(view) },
+                    selectedColor = selectedTabColor,
+                    unselectedColor = unselectedTabColor,
+                    selectedIconColor = selectedIconColor,
                 )
             }
         }
@@ -325,9 +380,12 @@ private fun BottomTab(
     view: AppView,
     selected: Boolean,
     onClick: () -> Unit,
+    selectedColor: Color,
+    unselectedColor: Color,
+    selectedIconColor: Color,
 ) {
     val color by animateColorAsState(
-        targetValue = if (selected) Color.White else Color(0xFF9B96A8),
+        targetValue = if (selected) selectedColor else unselectedColor,
         animationSpec = spring(dampingRatio = 0.75f, stiffness = 520f),
         label = "bottomNavTabColor",
     )
@@ -348,7 +406,7 @@ private fun BottomTab(
         Icon(
             imageVector = view.icon,
             contentDescription = view.label,
-            tint = if (selected) AccentPurple else color,
+            tint = if (selected) selectedIconColor else color,
             modifier = Modifier
                 .padding(top = 7.dp)
                 .size(iconSize),

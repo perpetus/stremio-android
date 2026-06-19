@@ -26,6 +26,5 @@ fun MainSection.toAppView(): AppView = when (this) {
     MainSection.Home -> AppView.Home
     MainSection.Discover -> AppView.Discover
     MainSection.Library -> AppView.Library
-    MainSection.Addons -> AppView.Settings
     MainSection.Settings -> AppView.Settings
 }

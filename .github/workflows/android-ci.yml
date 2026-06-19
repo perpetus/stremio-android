@@ -1,0 +1,45 @@
+name: Android CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
+
+      - name: Compile and assemble debug
+        run: ./gradlew :app:compileDebugKotlin :app:assembleDebug --warning-mode all
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: stremio-mobile-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

@@ -1,8 +1,13 @@
 package com.stremio.mobile.presentation.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,30 +28,46 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.Shadow
 import com.stremio.mobile.core.theme.AccentGreen
 import com.stremio.mobile.core.theme.AccentPurple
 import com.stremio.mobile.core.theme.CardFallback
 import com.stremio.mobile.core.theme.GlassSurface
 import com.stremio.mobile.core.theme.MutedText
 import com.stremio.mobile.data.model.MetaDetails
+import com.stremio.mobile.presentation.components.LocalGlobalUiTheme
+import com.stremio.mobile.presentation.components.drawBackdropSafe
+import com.stremio.mobile.presentation.components.rememberGlobalHapticFeedback
 
 @Composable
 fun DetailSheet(
@@ -56,10 +78,13 @@ fun DetailSheet(
     onOpenStreams: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val configuration = LocalConfiguration.current
+    val maxSheetHeight = (configuration.screenHeightDp.dp * 0.82f).coerceAtMost(720.dp)
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(462.dp)
+            .heightIn(min = 420.dp, max = maxSheetHeight)
             .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
             .background(Color(0xF2141422))
             .pointerInput(Unit) {
@@ -119,8 +144,10 @@ fun DetailSheet(
         }
 
         Column(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier
+                .padding(horizontal = 18.dp, vertical = 14.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = details.item.name,
@@ -147,7 +174,7 @@ fun DetailSheet(
                     color = Color(0xFFE4E0EE),
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
-                    maxLines = 4,
+                    maxLines = 5,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
@@ -158,40 +185,182 @@ fun DetailSheet(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+            ) {
+                DetailLiquidActionButton(
+                    label = if (inLibrary) "In Library" else "Add",
+                    imageVector = if (inLibrary) Icons.Outlined.Check else Icons.Outlined.Add,
                     onClick = onToggleLibrary,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentPurple),
-                ) {
-                    Icon(
-                        imageVector = if (inLibrary) Icons.Outlined.Check else Icons.Outlined.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (inLibrary) "In Library" else "Add")
-                }
-                Button(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                    tint = AccentPurple,
+                    surface = true,
+                )
+                DetailLiquidActionButton(
+                    label = "Play",
+                    imageVector = Icons.Outlined.PlayArrow,
                     onClick = onOpenStreams,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
                     enabled = !details.isLoading,
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AccentGreen,
-                        disabledContainerColor = GlassSurface,
-                    ),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Play", color = Color.White)
-                }
+                    tint = AccentGreen,
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun DetailLiquidActionButton(
+    label: String,
+    imageVector: ImageVector,
+    onClick: () -> Unit,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    backdrop: LayerBackdrop? = null,
+    surface: Boolean = false,
+) {
+    val triggerHaptic = rememberGlobalHapticFeedback()
+    val theme = LocalGlobalUiTheme.current
+    val tuning = theme.liquidGlassTuning.clamped()
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (pressed) 0.965f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 430f),
+        label = "detailLiquidButtonScale",
+    )
+    val shape = RoundedCornerShape(999.dp)
+    val contentColor = if (surface) {
+        Color(0xFF101018).copy(alpha = if (enabled) 0.92f else 0.42f)
+    } else {
+        Color.White.copy(alpha = if (enabled) 0.96f else 0.42f)
+    }
+    val realGlass = enabled && backdrop != null && theme.style == "modern" && theme.glassEffectsMode != "static"
+
+    Box(
+        modifier = modifier
+            .scale(scale)
+            .then(
+                if (realGlass) {
+                    Modifier.drawBackdropSafe(
+                        backdrop = backdrop,
+                        shape = { shape },
+                        effects = {
+                            vibrancy()
+                            blur(4f.dp.toPx())
+                            lens(
+                                refractionHeight = 16f.dp.toPx(),
+                                refractionAmount = 32f.dp.toPx(),
+                                depthEffect = true,
+                                chromaticAberration = tuning.chromaticAberration,
+                            )
+                        },
+                        highlight = {
+                            Highlight.Ambient.copy(
+                                width = Highlight.Ambient.width / 1.4f,
+                                blurRadius = Highlight.Ambient.blurRadius / 1.4f,
+                                alpha = 0.72f,
+                            )
+                        },
+                        shadow = {
+                            Shadow(
+                                radius = 18.dp,
+                                offset = androidx.compose.ui.unit.DpOffset(0.dp, 4.dp),
+                                color = Color.Black.copy(alpha = 0.18f),
+                            )
+                        },
+                        onDrawSurface = {
+                            if (surface) {
+                                drawRoundRect(Color.White.copy(alpha = 0.62f))
+                            } else {
+                                drawRoundRect(tint, blendMode = BlendMode.Hue)
+                                drawRoundRect(tint.copy(alpha = 0.72f))
+                            }
+                        },
+                    )
+                } else {
+                    Modifier
+                        .clip(shape)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = if (surface) {
+                                    listOf(
+                                        Color.White.copy(alpha = if (enabled) 0.78f else 0.14f),
+                                        Color.White.copy(alpha = if (enabled) 0.46f else 0.10f),
+                                    )
+                                } else {
+                                    listOf(
+                                        tint.copy(alpha = if (enabled) 0.78f else 0.12f),
+                                        tint.copy(alpha = if (enabled) 0.48f else 0.10f),
+                                    )
+                                },
+                            ),
+                        )
+                }
+            )
+            .border(
+                width = 0.8.dp,
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = if (enabled) 0.58f else 0.16f),
+                        Color.White.copy(alpha = if (enabled) 0.22f else 0.08f),
+                    ),
+                ),
+                shape = shape,
+            )
+            .clip(shape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+            ) {
+                triggerHaptic()
+                onClick()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(shape)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = if (enabled) 0.28f else 0.04f),
+                            Color.Transparent,
+                            Color.White.copy(alpha = if (surface) 0.08f else 0.04f),
+                        ),
+                    ),
+                ),
+        )
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 18.dp),
+        ) {
+            Icon(
+                imageVector = imageVector,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                color = contentColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

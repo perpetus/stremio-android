@@ -21,6 +21,7 @@ import com.stremio.core.runtime.RuntimeEvent
 import com.stremio.core.runtime.msg.Action
 import com.stremio.core.runtime.msg.ActionCtx
 import com.stremio.core.runtime.msg.ActionLoad
+import com.stremio.core.runtime.msg.ActionPlayer
 import com.stremio.core.types.addon.ExtraValue
 import com.stremio.core.types.addon.ResourcePath
 import com.stremio.core.types.addon.ResourceRequest
@@ -155,6 +156,20 @@ class StremioCore(context: Context) {
             Action(Action.Type.StreamingServer(com.stremio.core.runtime.msg.ActionStreamingServer(com.stremio.core.runtime.msg.ActionStreamingServer.Args.UpdateSettings(settings)))),
             Field.STREAMING_SERVER
         )
+    }
+
+    fun requestStreamStatistics(infoHash: String, fileIndex: Int) {
+        val request = com.stremio.core.models.StreamingServer.StatisticsRequest(infoHash = infoHash, fileIndex = fileIndex)
+        dispatch(
+            Action(Action.Type.StreamingServer(com.stremio.core.runtime.msg.ActionStreamingServer(com.stremio.core.runtime.msg.ActionStreamingServer.Args.GetStatistics(request)))),
+            Field.STREAMING_SERVER
+        )
+    }
+
+    /** The most recently fetched live torrent statistics, or null until [requestStreamStatistics] resolves. */
+    fun getStreamStatistics(): com.stremio.core.models.StreamingServer.Statistics? {
+        val content = getStreamingServer().statistics?.content
+        return (content as? com.stremio.core.models.LoadableStatistics.Content.Ready)?.value
     }
 
     fun getStreamingServer(): com.stremio.core.models.StreamingServer = Core.getState(Field.STREAMING_SERVER)
@@ -300,6 +315,62 @@ class StremioCore(context: Context) {
 
     // endregion
 
+    // region addons -------------------------------------------------------------------------------
+
+    fun getAddons(): com.stremio.core.models.AddonsWithFilters = Core.getState(Field.ADDONS)
+
+    fun addons(): Flow<com.stremio.core.models.AddonsWithFilters> = newStateFlow(Field.ADDONS)
+        .map { getAddons() }
+        .onStart {
+            if (getAddons().selected == null) {
+                loadInstalledAddons()
+            }
+            emit(getAddons())
+        }
+
+    fun loadAddons(request: ResourceRequest) {
+        val selected = com.stremio.core.models.AddonsWithFilters.Selected(request = request)
+        dispatchLoad(ActionLoad.Args.AddonsWithFilters(selected), Field.ADDONS)
+    }
+
+    /** Loads the user's installed addons, optionally filtered by a manifest-supported [type]. */
+    fun loadInstalledAddons(type: String? = null) {
+        val request = ResourceRequest(
+            base = "",
+            path = ResourcePath(resource = "", type = type ?: "", id = ""),
+        )
+        loadAddons(request)
+    }
+
+    fun installAddon(descriptor: com.stremio.core.types.addon.AddonDescriptor) {
+        dispatch(Action(Action.Type.Ctx(ActionCtx(ActionCtx.Args.InstallAddon(descriptor)))), Field.CTX)
+    }
+
+    fun uninstallAddon(descriptor: com.stremio.core.types.addon.AddonDescriptor) {
+        dispatch(Action(Action.Type.Ctx(ActionCtx(ActionCtx.Args.UninstallAddon(descriptor)))), Field.CTX)
+    }
+
+    fun upgradeAddon(descriptor: com.stremio.core.types.addon.AddonDescriptor) {
+        dispatch(Action(Action.Type.Ctx(ActionCtx(ActionCtx.Args.UpgradeAddon(descriptor)))), Field.CTX)
+    }
+
+    fun getAddonDetails(): com.stremio.core.models.AddonDetails = Core.getState(Field.ADDON_DETAILS)
+
+    fun addonDetails(transportUrl: String): Flow<com.stremio.core.models.AddonDetails> =
+        newStateFlow(Field.ADDON_DETAILS)
+            .map { getAddonDetails() }
+            .onStart {
+                loadAddonDetails(transportUrl)
+                emit(getAddonDetails())
+            }
+
+    fun loadAddonDetails(transportUrl: String) {
+        val selected = com.stremio.core.models.AddonDetails.Selected(transportUrl = transportUrl)
+        dispatchLoad(ActionLoad.Args.AddonDetails(selected), Field.ADDON_DETAILS)
+    }
+
+    // endregion
+
     // region streams ----------------------------------------------------------------------------
 
     /**
@@ -383,6 +454,81 @@ class StremioCore(context: Context) {
 
     fun getPlayer(): Player = Core.getState(Field.PLAYER)
 
+    fun playerFlow(): Flow<Player> = newStateFlow(Field.PLAYER)
+        .map { getPlayer() }
+        .onStart { emit(getPlayer()) }
+
+    fun updatePlayerStreamState(transform: (Player.StreamState) -> Player.StreamState) {
+        val current = getPlayer().streamState ?: Player.StreamState()
+        playerStreamStateChanged(transform(current))
+    }
+
+    fun playerStreamStateChanged(streamState: Player.StreamState) {
+        dispatch(Action(Action.Type.Player(ActionPlayer(ActionPlayer.Args.StreamStateChanged(streamState)))), Field.PLAYER)
+    }
+
+    fun setPlayerAudioTrack(id: String, language: String?) {
+        updatePlayerStreamState { current ->
+            current.copy(audioTrack = Player.AudioTrack(id = id, language = language))
+        }
+    }
+
+    fun setPlayerSubtitleTrack(id: String, embedded: Boolean, language: String?) {
+        updatePlayerStreamState { current ->
+            current.copy(subtitleTrack = Player.SubtitleTrack(id = id, embedded = embedded, language = language))
+        }
+    }
+
+    fun clearPlayerSubtitleTrack() {
+        updatePlayerStreamState { current ->
+            current.copy(subtitleTrack = null)
+        }
+    }
+
+    fun setPlayerSubtitleSettings(delayMs: Long? = null, sizePercent: Float? = null, offsetPercent: Float? = null) {
+        updatePlayerStreamState { current ->
+            current.copy(
+                subtitleDelay = delayMs ?: current.subtitleDelay,
+                subtitleSize = sizePercent ?: current.subtitleSize,
+                subtitleOffset = offsetPercent ?: current.subtitleOffset,
+            )
+        }
+    }
+
+    /** The next episode's metadata, if the core found one in the series' video list (null for movies / last episode). */
+    fun getNextVideo(): Video? = getPlayer().nextVideo
+
+    /**
+     * The saved watch position for [streamRequest]'s video, or 0 if there's no saved progress or
+     * the saved progress belongs to a different video (e.g. a different episode).
+     */
+    fun getResumePositionMs(streamRequest: ResourceRequest?): Long {
+        val state = getPlayer().libraryItem?.state ?: return 0L
+        return if (state.videoId == streamRequest?.path?.id) state.timeOffset else 0L
+    }
+
+    fun playerTimeChanged(timeMs: Long, durationMs: Long) {
+        val state = ActionPlayer.PlayerItemState(time = timeMs, duration = durationMs, device = DEVICE_NAME)
+        dispatch(Action(Action.Type.Player(ActionPlayer(ActionPlayer.Args.TimeChanged(state)))), Field.PLAYER)
+    }
+
+    fun playerSeek(timeMs: Long, durationMs: Long) {
+        val state = ActionPlayer.PlayerItemState(time = timeMs, duration = durationMs, device = DEVICE_NAME)
+        dispatch(Action(Action.Type.Player(ActionPlayer(ActionPlayer.Args.SeekAction(state)))), Field.PLAYER)
+    }
+
+    fun playerPausedChanged(paused: Boolean) {
+        dispatch(Action(Action.Type.Player(ActionPlayer(ActionPlayer.Args.PausedChanged(paused)))), Field.PLAYER)
+    }
+
+    fun playerEnded() {
+        dispatch(Action(Action.Type.Player(ActionPlayer(ActionPlayer.Args.Ended(pbandk.wkt.Empty())))), Field.PLAYER)
+    }
+
+    fun playerNextVideo() {
+        dispatch(Action(Action.Type.Player(ActionPlayer(ActionPlayer.Args.NextVideo(pbandk.wkt.Empty())))), Field.PLAYER)
+    }
+
     private fun directUrl(converted: LoadableConvertedStream?): String? {
         val content = converted?.content
         return if (content is LoadableConvertedStream.Content.Ready) directUrl(content.value) else null
@@ -425,5 +571,6 @@ class StremioCore(context: Context) {
 
     companion object {
         const val STREAMING_SERVER_BASE = "http://127.0.0.1:11470"
+        private const val DEVICE_NAME = "android"
     }
 }

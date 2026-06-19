@@ -23,13 +23,9 @@ import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.PlayCircle
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,6 +44,12 @@ import com.stremio.mobile.core.theme.AccentPurple
 import com.stremio.mobile.core.theme.GlassSurface
 import com.stremio.mobile.core.theme.MutedText
 import com.stremio.mobile.presentation.components.SectionTitle
+import com.stremio.mobile.presentation.components.ThemedToggle
+import com.stremio.mobile.presentation.components.ThemedSlider
+import com.stremio.mobile.presentation.components.ThemedCard
+import com.stremio.mobile.presentation.components.ThemedButton
+import com.stremio.mobile.presentation.components.ThemedDropdownMenu
+import com.stremio.mobile.presentation.components.rememberGlobalHapticFeedback
 
 enum class SettingsSubScreen {
     Main,
@@ -57,6 +59,7 @@ enum class SettingsSubScreen {
     Player,
     Streaming,
     Android,
+    LiquidGlassLab,
     Info,
 }
 
@@ -73,43 +76,46 @@ fun SettingsPanel(
         SectionTitle("Settings")
 
         // Account / Profile card
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(GlassSurface)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ThemedCard(
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = 20.dp
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.AccountCircle,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(36.dp)
-                )
-                Column {
-                    Text(
-                        text = email ?: "Stremio Account",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AccountCircle,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
                     )
-                    Text(
-                        text = if (email != null) "Logged in" else "Guest Mode",
-                        color = MutedText,
-                        fontSize = 13.sp,
-                    )
+                    Column {
+                        Text(
+                            text = email ?: "Stremio Account",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = if (email != null) "Logged in" else "Guest Mode",
+                            color = MutedText,
+                            fontSize = 13.sp,
+                        )
+                    }
                 }
+                AuthButton(
+                    text = "Log out",
+                    containerColor = Color(0x15FFFFFF),
+                    onClick = onLogout,
+                )
             }
-            AuthButton(
-                text = "Log out",
-                containerColor = Color(0x15FFFFFF),
-                onClick = onLogout,
-            )
         }
 
         // Navigation Menu Categories
@@ -153,6 +159,12 @@ fun SettingsPanel(
                 onClick = { onNavigateTo(SettingsSubScreen.Android) }
             )
             SettingsMenuRow(
+                icon = Icons.Outlined.Tune,
+                title = "Liquid Glass Lab",
+                description = "Tune blur, refraction, highlights, and control defaults",
+                onClick = { onNavigateTo(SettingsSubScreen.LiquidGlassLab) }
+            )
+            SettingsMenuRow(
                 icon = Icons.Outlined.Info,
                 title = "Info & About",
                 description = "App version, directories, and diagnostics info",
@@ -169,14 +181,12 @@ private fun AuthButton(
     containerColor: Color,
     onClick: () -> Unit,
 ) {
-    Button(
+    ThemedButton(
+        text = text,
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = containerColor),
-    ) {
-        Text(text = text, color = Color.White)
-    }
+        containerColor = containerColor,
+    )
 }
 
 @Composable
@@ -186,47 +196,54 @@ private fun SettingsMenuRow(
     description: String,
     onClick: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(GlassSurface)
-            .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+    val triggerHaptic = rememberGlobalHapticFeedback()
+    ThemedCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 16.dp
     ) {
         Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    triggerHaptic()
+                    onClick()
+                }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.weight(1f)
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = title,
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = description,
+                        color = MutedText,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
             Icon(
-                imageVector = icon,
+                imageVector = Icons.Outlined.ChevronRight,
                 contentDescription = null,
-                tint = Color.White,
+                tint = MutedText,
                 modifier = Modifier.size(24.dp)
             )
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = title,
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = description,
-                    color = MutedText,
-                    fontSize = 12.sp,
-                )
-            }
         }
-        Icon(
-            imageVector = Icons.Outlined.ChevronRight,
-            contentDescription = null,
-            tint = MutedText,
-            modifier = Modifier.size(24.dp)
-        )
     }
 }
 
@@ -235,6 +252,7 @@ fun SettingsHeader(
     title: String,
     onBack: () -> Unit
 ) {
+    val triggerHaptic = rememberGlobalHapticFeedback()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -248,7 +266,10 @@ fun SettingsHeader(
             tint = Color.White,
             modifier = Modifier
                 .size(24.dp)
-                .clickable { onBack() }
+                .clickable {
+                    triggerHaptic()
+                    onBack()
+                }
         )
         Text(
             text = title,
@@ -266,43 +287,40 @@ fun SettingsToggleRow(
     onCheckedChange: (Boolean) -> Unit,
     description: String? = null
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(GlassSurface)
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+    ThemedCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 16.dp
     ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            if (description != null) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 Text(
-                    text = description,
-                    color = MutedText,
-                    fontSize = 12.sp,
+                    text = title,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
                 )
+                if (description != null) {
+                    Text(
+                        text = description,
+                        color = MutedText,
+                        fontSize = 12.sp,
+                    )
+                }
             }
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = AccentPurple,
-                uncheckedThumbColor = MutedText,
-                uncheckedTrackColor = Color(0x33FFFFFF)
+            ThemedToggle(
+                checked = checked,
+                onCheckedChange = onCheckedChange
             )
-        )
+        }
     }
 }
 
@@ -316,58 +334,124 @@ fun <T> SettingsDropdownRow(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selectedLabel = options.find { it.first == selectedValue }?.second ?: selectedValue.toString()
+    val triggerHaptic = rememberGlobalHapticFeedback()
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(GlassSurface)
-            .clickable { expanded = true }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+    ThemedCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 16.dp
     ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    triggerHaptic()
+                    expanded = true
+                }
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            if (description != null) {
-                Text(
-                    text = description,
-                    color = MutedText,
-                    fontSize = 12.sp,
-                )
-            }
-        }
-        Box {
-            Text(
-                text = selectedLabel,
-                color = AccentPurple,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-            )
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.background(GlassSurface)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                options.forEach { (value, label) ->
-                    DropdownMenuItem(
-                        text = { Text(text = label, color = Color.White) },
-                        onClick = {
-                            onSelect(value)
-                            expanded = false
-                        }
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (description != null) {
+                    Text(
+                        text = description,
+                        color = MutedText,
+                        fontSize = 12.sp,
                     )
                 }
             }
+            Box {
+                Text(
+                    text = selectedLabel,
+                    color = AccentPurple,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+                ThemedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                ) {
+                    options.forEach { (value, label) ->
+                        DropdownMenuItem(
+                            text = { Text(text = label, color = Color.White) },
+                            onClick = {
+                                triggerHaptic()
+                                onSelect(value)
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsSliderRow(
+    title: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    displayValue: String = "${(value * 100).toInt()}%",
+    description: String? = null
+) {
+    ThemedCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 16.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = title,
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (description != null) {
+                        Text(
+                            text = description,
+                            color = MutedText,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+                Text(
+                    text = displayValue,
+                    color = AccentPurple,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            ThemedSlider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = valueRange,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

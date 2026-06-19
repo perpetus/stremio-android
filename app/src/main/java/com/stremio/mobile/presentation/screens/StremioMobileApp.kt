@@ -32,6 +32,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,14 +52,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.Shadow
+import com.stremio.mobile.presentation.components.LocalGlobalUiTheme
+import com.stremio.mobile.presentation.components.GlobalUiTheme
+import com.stremio.mobile.presentation.components.LocalGlassAlpha
 import com.stremio.mobile.core.theme.*
 import com.stremio.mobile.data.model.CatalogItem
+import com.stremio.mobile.data.model.LiquidGlassTuning
 import com.stremio.mobile.presentation.components.*
 import com.stremio.mobile.presentation.navigation.AppView
 import com.stremio.mobile.presentation.navigation.toAppView
@@ -71,18 +75,40 @@ fun StremioMobileApp(viewModel: MainViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val streamsState by viewModel.streamsState.collectAsStateWithLifecycle()
     val isPlayerOpen by viewModel.isPlayerOpen.collectAsStateWithLifecycle()
+    val rootGlobalTheme = remember(
+        state.globalUiStyle,
+        state.glassEffectsMode,
+        state.globalGlassAlpha,
+        state.glassHapticsEnabled,
+        state.hapticsIntensity,
+        state.liquidGlassTuning,
+        state.adaptiveGlassContrast,
+    ) {
+        GlobalUiTheme(
+            style = state.globalUiStyle,
+            glassEffectsMode = state.glassEffectsMode,
+            glassAlpha = state.globalGlassAlpha,
+            hapticsEnabled = state.glassHapticsEnabled,
+            hapticsIntensity = state.hapticsIntensity,
+            liquidGlassTuning = state.liquidGlassTuning,
+            adaptiveGlassContrast = state.adaptiveGlassContrast,
+        )
+    }
 
     StremioMobileTheme {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(StremioBackgroundBrush),
+        CompositionLocalProvider(
+            LocalGlobalUiTheme provides rootGlobalTheme,
+            LocalGlassAlpha provides state.globalGlassAlpha,
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(StremioBackgroundBrush),
+            ) {
             if (state.account.isAuthenticated) {
                 BoardScreen(
                     state = state,
                     onRefresh = viewModel::refreshCatalogs,
-                    onRefreshAddons = viewModel::refreshAddons,
                     onOpenSearch = viewModel::openSearch,
                     onSelectSection = viewModel::selectSection,
                     onOpenDetails = viewModel::openDetails,
@@ -108,6 +134,23 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                     onSetMobileDataWarning = viewModel::setMobileDataWarning,
                     onSetKeepScreenOn = viewModel::setKeepScreenOn,
                     onSetSeedingEnabled = viewModel::setSeedingEnabled,
+                    onSelectAddonsFilter = viewModel::selectAddonsFilter,
+                    onOpenAddonDetails = viewModel::openAddonDetails,
+                    onInstallAddon = viewModel::installAddon,
+                    onUninstallAddon = viewModel::uninstallAddon,
+                    onInstallAddonByUrl = viewModel::installAddonByUrl,
+                    onSetMinSeedsThreshold = viewModel::setMinSeedsThreshold,
+                    onSetMinDownloadSpeedBps = viewModel::setMinDownloadSpeedBps,
+                    onSetPreferredQuality = viewModel::setPreferredQuality,
+                    onSetGlobalUiStyle = viewModel::setGlobalUiStyle,
+                    onSetGlassEffectsMode = viewModel::setGlassEffectsMode,
+                    onSetAutoSwitchOnDeadStream = viewModel::setAutoSwitchOnDeadStream,
+                    onSetGlobalGlassAlpha = viewModel::setGlobalGlassAlpha,
+                    onSetAdaptiveGlassContrastEnabled = viewModel::setAdaptiveGlassContrastEnabled,
+                    onSetGlassHapticsEnabled = viewModel::setGlassHapticsEnabled,
+                    onSetHapticsIntensity = viewModel::setHapticsIntensity,
+                    onSetLiquidGlassTuning = viewModel::setLiquidGlassTuning,
+                    onResetLiquidGlassTuning = viewModel::resetLiquidGlassTuning,
                 )
             } else {
                 AuthFlow(
@@ -159,9 +202,37 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                 }
             }
 
+            state.selectedAddonDetails?.let { details ->
+                BackHandler(onBack = viewModel::closeAddonDetails)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0x99000000))
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null
+                        ) { viewModel.closeAddonDetails() }
+                ) {
+                    AddonDetailsSheet(
+                        details = details,
+                        onBack = viewModel::closeAddonDetails,
+                        onInstall = viewModel::installAddon,
+                        onUninstall = viewModel::uninstallAddon,
+                        onUpgrade = viewModel::upgradeAddon,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) {} // Block click propagation
+                    )
+                }
+            }
+
             if (streamsState.isOpen) {
                 StreamsSheet(
                     state = streamsState,
+                    preferredQuality = state.preferredQuality,
                     onBack = {
                         if (streamsState.isSeries && streamsState.selectedVideoId != null) {
                             viewModel.backToEpisodes()
@@ -172,6 +243,8 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                     onSelect = viewModel::playStream,
                     onSelectEpisode = viewModel::selectEpisode,
                     onSelectSeason = viewModel::selectSeason,
+                    onSelectProvider = viewModel::selectStreamProvider,
+                    onSelectSortCriterion = viewModel::selectStreamSortCriterion,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -187,17 +260,42 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                     onBack = viewModel::closePlayer,
                     getSubtitlePrefs = viewModel::getSubtitlePrefs,
                     onSubtitlePrefsChanged = viewModel::updateSubtitlePrefs,
+                    profileSettings = state.profileSettings,
+                    getPlayerStreamState = viewModel::getPlayerStreamState,
+                    onAudioTrackSelected = viewModel::rememberAudioTrack,
+                    onSubtitleTrackSelected = viewModel::rememberSubtitleTrack,
+                    onSubtitlesDisabled = viewModel::rememberSubtitlesDisabled,
+                    onSubtitleStyleChanged = viewModel::rememberSubtitleStyle,
+                    onLocalSubtitlePicked = viewModel::importLocalSubtitle,
+                    nextVideo = state.nextVideo,
+                    showNextVideoPopup = state.showNextVideoPopup,
+                    onDismissNextVideoPopup = viewModel::dismissNextVideoPopup,
+                    onPlayNext = { state.nextVideo?.let(viewModel::playNextVideo) },
+                    onTick = viewModel::onPlayerTick,
+                    onSeekReported = viewModel::onPlayerSeek,
+                    onPausedChanged = viewModel::onPlayerPausedChanged,
+                    onEnded = viewModel::onPlaybackEnded,
+                    showNoSeedsBanner = state.showNoSeedsBanner,
+                    noSeedsReason = state.noSeedsReason,
+                    onPlayNextBestStream = { viewModel.playNextBestStream() },
+                    globalUiStyle = state.globalUiStyle,
+                    glassEffectsMode = state.glassEffectsMode,
+                    globalGlassAlpha = state.globalGlassAlpha,
+                    adaptiveGlassContrast = state.adaptiveGlassContrast,
+                    glassHapticsEnabled = state.glassHapticsEnabled,
+                    hapticsIntensity = state.hapticsIntensity,
+                    liquidGlassTuning = state.liquidGlassTuning,
                 )
             }
         }
     }
+}
 }
 
 @Composable
 private fun BoardScreen(
     state: com.stremio.mobile.presentation.state.MainUiState,
     onRefresh: () -> Unit,
-    onRefreshAddons: () -> Unit,
     onOpenSearch: () -> Unit,
     onSelectSection: (MainSection) -> Unit,
     onOpenDetails: (CatalogItem) -> Unit,
@@ -223,6 +321,23 @@ private fun BoardScreen(
     onSetMobileDataWarning: (Boolean) -> Unit,
     onSetKeepScreenOn: (Boolean) -> Unit,
     onSetSeedingEnabled: (Boolean) -> Unit,
+    onSelectAddonsFilter: (com.stremio.core.types.addon.ResourceRequest) -> Unit,
+    onOpenAddonDetails: (String) -> Unit,
+    onInstallAddon: (com.stremio.mobile.data.model.AddonItem) -> Unit,
+    onUninstallAddon: (com.stremio.mobile.data.model.AddonItem) -> Unit,
+    onInstallAddonByUrl: (String) -> Boolean,
+    onSetMinSeedsThreshold: (Int) -> Unit,
+    onSetMinDownloadSpeedBps: (Long) -> Unit,
+    onSetPreferredQuality: (String) -> Unit,
+    onSetGlobalUiStyle: (String) -> Unit,
+    onSetGlassEffectsMode: (String) -> Unit,
+    onSetAutoSwitchOnDeadStream: (Boolean) -> Unit,
+    onSetGlobalGlassAlpha: (Float) -> Unit,
+    onSetAdaptiveGlassContrastEnabled: (Boolean) -> Unit,
+    onSetGlassHapticsEnabled: (Boolean) -> Unit,
+    onSetHapticsIntensity: (String) -> Unit,
+    onSetLiquidGlassTuning: (LiquidGlassTuning) -> Unit,
+    onResetLiquidGlassTuning: () -> Unit,
 ) {
     var settingsSubScreen by rememberSaveable { mutableStateOf(SettingsSubScreen.Main) }
 
@@ -243,20 +358,67 @@ private fun BoardScreen(
         }
     }
 
-    val backdrop = rememberLayerBackdrop {
-        drawRect(StremioBackground)
-        drawContent()
+    val globalTheme = remember(
+        state.globalUiStyle,
+        state.glassEffectsMode,
+        state.globalGlassAlpha,
+        state.glassHapticsEnabled,
+        state.hapticsIntensity,
+        state.liquidGlassTuning,
+        state.adaptiveGlassContrast,
+    ) {
+        GlobalUiTheme(
+            style = state.globalUiStyle,
+            glassEffectsMode = state.glassEffectsMode,
+            glassAlpha = state.globalGlassAlpha,
+            hapticsEnabled = state.glassHapticsEnabled,
+            hapticsIntensity = state.hapticsIntensity,
+            liquidGlassTuning = state.liquidGlassTuning,
+            adaptiveGlassContrast = state.adaptiveGlassContrast,
+        )
+    }
+
+    val realGlassEnabled = state.globalUiStyle == "modern" && state.glassEffectsMode != "static"
+    val appBackdrop = if (realGlassEnabled) {
+        rememberLayerBackdrop {
+            drawContent()
+        }
+    } else {
+        null
+    }
+    val contentBackdrop = if (realGlassEnabled) {
+        rememberLayerBackdrop {
+            drawContent()
+        }
+    } else {
+        null
     }
 
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .layerBackdrop(backdrop)
-                .windowInsetsPadding(WindowInsets.statusBars),
+    val isAddonsSettingsPage = state.selectedSection == MainSection.Settings &&
+            settingsSubScreen == SettingsSubScreen.Addons
+    CompositionLocalProvider(
+        LocalGlobalUiTheme provides globalTheme,
+        LocalGlassAlpha provides state.globalGlassAlpha,
+        LocalGlobalBackdrop provides appBackdrop
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (appBackdrop != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .layerBackdrop(appBackdrop)
+                        .background(StremioBackgroundBrush)
+                )
+            }
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (contentBackdrop != null) Modifier.layerBackdrop(contentBackdrop) else Modifier)
+                    .windowInsetsPadding(WindowInsets.statusBars),
             contentPadding = PaddingValues(bottom = BottomBarSpace + navBottom),
-            verticalArrangement = Arrangement.spacedBy(27.dp),
+            verticalArrangement = Arrangement.spacedBy(if (isAddonsSettingsPage) 10.dp else 27.dp),
         ) {
             item {
                 BoardHeader(
@@ -313,16 +475,13 @@ private fun BoardScreen(
                                 .fillMaxWidth()
                         ) {
                             if (state.isDiscoverSeeAll) {
-                                Icon(
+                                ThemedIconButton(
                                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                                     contentDescription = "Back",
-                                    tint = Color.White,
+                                    onClick = { onCloseDiscoverCatalog() },
                                     modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(GlassSurface)
-                                        .clickable { onCloseDiscoverCatalog() }
-                                        .padding(8.dp),
+                                        .size(36.dp),
+                                    containerColor = GlassSurface,
                                 )
                             }
                             Text(
@@ -337,7 +496,7 @@ private fun BoardScreen(
                     item {
                         DiscoverFiltersRow(
                             discoverCatalogWithFilters = state.discoverCatalogWithFilters,
-                            backdrop = backdrop,
+                            backdrop = appBackdrop,
                             onSelectRequest = onSelectDiscoverFilter
                         )
                     }
@@ -379,7 +538,7 @@ private fun BoardScreen(
                     item {
                         LibraryFiltersRow(
                             libraryWithFilters = state.libraryWithFilters,
-                            backdrop = backdrop,
+                            backdrop = appBackdrop,
                             onSelectRequest = onSelectLibraryFilter
                         )
                     }
@@ -414,18 +573,6 @@ private fun BoardScreen(
                     }
                 }
 
-                MainSection.Addons -> {
-                    item { SectionTitle("Addons") }
-                    if (state.addons.isLoading) {
-                        item { LoadingRow() }
-                    } else if (state.addons.error != null) {
-                        item { EmptyState(state.addons.error) }
-                    } else {
-                        item { AddonShelf(title = "Official Stremio Addons", addons = state.addons.official) }
-                        item { AddonShelf(title = "Community Addons", addons = state.addons.community) }
-                    }
-                }
-
                 MainSection.Settings -> {
                     when (settingsSubScreen) {
                         SettingsSubScreen.Main -> {
@@ -439,40 +586,38 @@ private fun BoardScreen(
                         }
                         SettingsSubScreen.Addons -> {
                             item {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    modifier = Modifier
-                                        .padding(horizontal = 16.dp)
-                                        .fillMaxWidth()
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                        contentDescription = "Back",
-                                        tint = Color.White,
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(GlassSurface)
-                                            .clickable { settingsSubScreen = SettingsSubScreen.Main }
-                                            .padding(8.dp),
-                                    )
-                                    Text(
-                                        text = "Addons",
-                                        color = Color.White,
-                                        fontSize = 22.sp,
-                                        lineHeight = 27.sp,
-                                        fontWeight = FontWeight.ExtraBold,
+                                AddonsHeaderAndControls(
+                                    state = state.addons,
+                                    backdrop = appBackdrop,
+                                    onBack = { settingsSubScreen = SettingsSubScreen.Main },
+                                    onSelectFilter = onSelectAddonsFilter,
+                                    onInstallByUrl = onInstallAddonByUrl,
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                )
+                            }
+                            when {
+                                state.addons.isLoading -> item { LoadingRow() }
+                                state.addons.error != null -> item { EmptyState(state.addons.error) }
+                                state.addons.items.isEmpty() -> item {
+                                    EmptyState(
+                                        if (state.addons.isBrowsingRemote) "No addons found in this catalog." else "No addons installed."
                                     )
                                 }
-                            }
-                            if (state.addons.isLoading) {
-                                item { LoadingRow() }
-                            } else if (state.addons.error != null) {
-                                item { EmptyState(state.addons.error) }
-                            } else {
-                                item { AddonShelf(title = "Official Stremio Addons", addons = state.addons.official) }
-                                item { AddonShelf(title = "Community Addons", addons = state.addons.community) }
+                                else -> {
+                                    items(
+                                        items = state.addons.items,
+                                        key = { addon -> addon.transportUrl },
+                                        contentType = { "addon-row" },
+                                    ) { addon ->
+                                        AddonRow(
+                                            addon = addon,
+                                            onClick = { onOpenAddonDetails(addon.transportUrl) },
+                                            onInstall = { onInstallAddon(addon) },
+                                            onUninstall = { onUninstallAddon(addon) },
+                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                        )
+                                    }
+                                }
                             }
                         }
                         SettingsSubScreen.General -> {
@@ -491,7 +636,19 @@ private fun BoardScreen(
                             item {
                                 InterfaceSettingsScreen(
                                     settings = state.profileSettings,
+                                    globalUiStyle = state.globalUiStyle,
+                                    glassEffectsMode = state.glassEffectsMode,
+                                    globalGlassAlpha = state.globalGlassAlpha,
+                                    adaptiveGlassContrast = state.adaptiveGlassContrast,
+                                    glassHapticsEnabled = state.glassHapticsEnabled,
+                                    hapticsIntensity = state.hapticsIntensity,
                                     onUpdateSettings = onUpdateProfileSettings,
+                                    onSetGlobalUiStyle = onSetGlobalUiStyle,
+                                    onSetGlassEffectsMode = onSetGlassEffectsMode,
+                                    onSetGlobalGlassAlpha = onSetGlobalGlassAlpha,
+                                    onSetAdaptiveGlassContrastEnabled = onSetAdaptiveGlassContrastEnabled,
+                                    onSetGlassHapticsEnabled = onSetGlassHapticsEnabled,
+                                    onSetHapticsIntensity = onSetHapticsIntensity,
                                     onBack = { settingsSubScreen = SettingsSubScreen.Main }
                                 )
                             }
@@ -513,11 +670,19 @@ private fun BoardScreen(
                                     isPingLoading = state.isPingLoading,
                                     serverSettings = state.serverSettings,
                                     isSeedingEnabled = state.isSeedingEnabled,
+                                    minSeedsThreshold = state.minSeedsThreshold,
+                                    minDownloadSpeedBps = state.minDownloadSpeedBps,
+                                    preferredQuality = state.preferredQuality,
+                                    isAutoSwitchOnDeadStream = state.isAutoSwitchOnDeadStream,
                                     onStartServer = onStartServer,
                                     onStopServer = onStopServer,
                                     onCheckServer = onCheckServer,
                                     onUpdateServerSettings = onUpdateServerSettings,
                                     onSetSeedingEnabled = onSetSeedingEnabled,
+                                    onSetMinSeedsThreshold = onSetMinSeedsThreshold,
+                                    onSetMinDownloadSpeedBps = onSetMinDownloadSpeedBps,
+                                    onSetPreferredQuality = onSetPreferredQuality,
+                                    onSetAutoSwitchOnDeadStream = onSetAutoSwitchOnDeadStream,
                                     onBack = { settingsSubScreen = SettingsSubScreen.Main }
                                 )
                             }
@@ -533,6 +698,22 @@ private fun BoardScreen(
                                     onSetMobileDataWarning = onSetMobileDataWarning,
                                     isKeepScreenOn = state.isKeepScreenOn,
                                     onSetKeepScreenOn = onSetKeepScreenOn,
+                                    onBack = { settingsSubScreen = SettingsSubScreen.Main }
+                                )
+                            }
+                        }
+                        SettingsSubScreen.LiquidGlassLab -> {
+                            item {
+                                LiquidGlassDevScreen(
+                                    globalUiStyle = state.globalUiStyle,
+                                    glassEffectsMode = state.glassEffectsMode,
+                                    globalGlassAlpha = state.globalGlassAlpha,
+                                    tuning = state.liquidGlassTuning,
+                                    onSetGlobalUiStyle = onSetGlobalUiStyle,
+                                    onSetGlassEffectsMode = onSetGlassEffectsMode,
+                                    onSetGlobalGlassAlpha = onSetGlobalGlassAlpha,
+                                    onSetLiquidGlassTuning = onSetLiquidGlassTuning,
+                                    onResetLiquidGlassTuning = onResetLiquidGlassTuning,
                                     onBack = { settingsSubScreen = SettingsSubScreen.Main }
                                 )
                             }
@@ -554,11 +735,12 @@ private fun BoardScreen(
 
         StremioBottomBar(
             selectedView = state.selectedSection.toAppView(),
-            backdrop = backdrop,
+            backdrop = contentBackdrop ?: appBackdrop,
             onSelect = { onSelectSection(it.toSection()) },
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
+}
 }
 
 @Composable
@@ -599,15 +781,17 @@ private fun typeLabel(type: String?): String {
 }
 
 @Composable
-private fun DropdownFilter(
+fun DropdownFilter(
     label: String,
     options: List<String>,
     selectedIndex: Int,
     onSelectIndex: (Int) -> Unit,
-    backdrop: LayerBackdrop,
+    backdrop: LayerBackdrop?,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val theme = LocalGlobalUiTheme.current
+    val useRealGlass = theme.style == "modern" && theme.glassEffectsMode == "full" && backdrop != null
     Box(modifier = modifier) {
         val backgroundColor = GlassSurface
         val textColor = Color.White
@@ -634,12 +818,10 @@ private fun DropdownFilter(
             )
         }
 
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier
+        val menuModifier = if (useRealGlass) {
+            Modifier
                 .width(180.dp)
-                .drawBackdrop(
+                .drawBackdropSafe(
                     backdrop = backdrop,
                     shape = { RoundedCornerShape(12.dp) },
                     effects = {
@@ -664,6 +846,16 @@ private fun DropdownFilter(
                         drawRoundRect(Color(0x85131220))
                     }
                 )
+        } else {
+            Modifier
+                .width(180.dp)
+                .background(if (theme.style == "modern") Color(0xEE141422) else GlassSurface)
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = menuModifier
         ) {
             options.forEachIndexed { index, option ->
                 val isSelected = index == selectedIndex
@@ -690,7 +882,7 @@ private fun DropdownFilter(
 @Composable
 private fun LibraryFiltersRow(
     libraryWithFilters: com.stremio.core.models.LibraryWithFilters?,
-    backdrop: LayerBackdrop,
+    backdrop: LayerBackdrop?,
     onSelectRequest: (com.stremio.core.models.LibraryWithFilters.LibraryRequest) -> Unit
 ) {
     if (libraryWithFilters == null) return
@@ -750,7 +942,7 @@ private fun LibraryFiltersRow(
 @Composable
 private fun DiscoverFiltersRow(
     discoverCatalogWithFilters: com.stremio.core.models.CatalogWithFilters?,
-    backdrop: LayerBackdrop,
+    backdrop: LayerBackdrop?,
     onSelectRequest: (com.stremio.core.types.addon.ResourceRequest) -> Unit
 ) {
     if (discoverCatalogWithFilters == null) return

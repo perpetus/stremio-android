@@ -9,7 +9,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class JniStreamingServerController(private val context: Context) : StreamingServerController {
+class JniStreamingServerController(
+    private val context: Context,
+    private val useForegroundService: () -> Boolean
+) : StreamingServerController {
     private val mutableState = MutableStateFlow<StreamingServerState>(StreamingServerState.Stopped)
     override val state: StateFlow<StreamingServerState> = mutableState
 
@@ -34,13 +37,17 @@ class JniStreamingServerController(private val context: Context) : StreamingServ
         }
         mutableState.value = StreamingServerState.Starting
         withContext(Dispatchers.IO) {
-            val serviceIntent = Intent(context, ServerService::class.java)
+            val useForeground = useForegroundService()
+            val serviceIntent = Intent(context, ServerService::class.java).apply {
+                putExtra(ServerService.EXTRA_FOREGROUND, useForeground)
+            }
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && useForeground) {
                     context.startForegroundService(serviceIntent)
                 } else {
                     context.startService(serviceIntent)
                 }
+
 
                 val configDir = File(context.filesDir, "stream-server").absolutePath
                 val cacheDir = File(context.cacheDir, "stream-server").absolutePath

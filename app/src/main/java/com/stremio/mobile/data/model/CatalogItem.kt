@@ -12,4 +12,6 @@ data class CatalogItem(
     val inCinema: Boolean = false,
     val watched: Boolean = false,
     val remainingEpisodes: Int? = null,
+    val continueWatchingVideoId: String? = null,
+    val isContinueWatching: Boolean = false,
 )

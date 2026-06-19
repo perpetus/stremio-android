@@ -2,6 +2,8 @@ package com.stremio.mobile.presentation.viewmodel
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.stremio.core.runtime.RuntimeEvent
@@ -12,12 +14,21 @@ import com.stremio.mobile.core.utils.parseStreamDescription
 import com.stremio.mobile.data.model.*
 import com.stremio.mobile.data.repository.*
 import com.stremio.mobile.player.PlaybackState
+import com.stremio.mobile.player.ExternalSubtitle
+import com.stremio.mobile.player.LanguageCatalog
+import com.stremio.mobile.player.PlayerEngine
+import com.stremio.mobile.player.PlayerSubtitleStyle
+import com.stremio.mobile.player.PlayerTrackOption
 import com.stremio.mobile.presentation.state.*
 import com.stremio.mobile.server.StreamingServerController
 import com.stremio.mobile.server.StreamingServerState
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -25,6 +36,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -37,11 +49,13 @@ class MainViewModel(
     private val authRepository: AuthRepository,
     private val boardRepository: BoardRepository,
     private val catalogRepository: CatalogRepository,
+    private val addonRepository: AddonRepository,
     private val playbackRepository: PlaybackRepository,
     private val serverController: StreamingServerController,
     private val core: StremioCore,
     appContext: Context,
 ) : ViewModel() {
+    private val appContext = appContext.applicationContext
     private val latestIntentUri = MutableStateFlow<String?>(null)
     private val account = MutableStateFlow(authRepository.accountFromCore())
     private var authInFlight = false
@@ -52,6 +66,11 @@ class MainViewModel(
     private val isSearchOpen = MutableStateFlow(false)
     private val library = MutableStateFlow(CatalogShelf(title = "Library", isLoading = false))
     private val addons = MutableStateFlow(AddonsUiState())
+    private val selectedAddonDetails = MutableStateFlow<AddonDetailsUiState?>(null)
+    private val nextVideo = MutableStateFlow<com.stremio.core.types.resource.Video?>(null)
+    private val showNextVideoPopup = MutableStateFlow(false)
+    private val showNoSeedsBanner = MutableStateFlow(false)
+    private val noSeedsReason = MutableStateFlow<String?>(null)
     private val selectedDetails = MutableStateFlow<MetaDetails?>(null)
     private val continueWatching = MutableStateFlow(CatalogShelf(title = "Continue Watching"))
     private val boardShelves = MutableStateFlow<List<CatalogShelf>>(emptyList())
@@ -74,12 +93,26 @@ class MainViewModel(
     private val isKeepScreenOn = MutableStateFlow(authRepository.isKeepScreenOn())
     private val isTraktAuthenticated = MutableStateFlow(false)
     private val isSeedingEnabled = MutableStateFlow(true)
+    private val minSeedsThreshold = MutableStateFlow(authRepository.getMinSeedsThreshold())
+    private val minDownloadSpeedBps = MutableStateFlow(authRepository.getMinDownloadSpeedBps())
+    private val preferredQuality = MutableStateFlow(authRepository.getPreferredQuality())
+    private val globalUiStyle = MutableStateFlow(authRepository.getGlobalUiStyle())
+    private val glassEffectsMode = MutableStateFlow(authRepository.getGlassEffectsMode())
+    private val isAutoSwitchOnDeadStream = MutableStateFlow(authRepository.isAutoSwitchOnDeadStream())
+    private val globalGlassAlpha = MutableStateFlow(authRepository.getGlobalGlassAlpha())
+    private val adaptiveGlassContrast = MutableStateFlow(authRepository.isAdaptiveGlassContrastEnabled())
+    private val glassHapticsEnabled = MutableStateFlow(authRepository.getGlassHapticsEnabled())
+    private val hapticsIntensity = MutableStateFlow(authRepository.getHapticsIntensity())
+    private val liquidGlassTuning = MutableStateFlow(authRepository.getLiquidGlassTuning())
+
+    private var lastServerActivityMs: Long = System.currentTimeMillis()
+    private val IDLE_TIMEOUT_MS = 5 * 60 * 1000L // 5 minutes
 
     private val serverPingStatus = MutableStateFlow("Not checked")
     private val isPingLoading = MutableStateFlow(false)
 
-    private val configPath = File(appContext.filesDir, "stream-server").absolutePath
-    private val cachePath = File(appContext.cacheDir, "stream-server").absolutePath
+    private val configPath = File(this.appContext.filesDir, "stream-server").absolutePath
+    private val cachePath = File(this.appContext.cacheDir, "stream-server").absolutePath
 
     private val streams = MutableStateFlow(StreamsUiState())
     val streamsState: StateFlow<StreamsUiState> = streams
@@ -101,6 +134,14 @@ class MainViewModel(
     private var playJob: Job? = null
     private var searchJob: Job? = null
     private var detailsJob: Job? = null
+    private var addonDetailsJob: Job? = null
+    private var nextVideoJob: Job? = null
+    private var subtitleObserverJob: Job? = null
+    private var lastPlayedOption: StreamOption? = null
+    private var dismissedNextVideoId: String? = null
+    private var lastTimeReportMs = 0L
+    private var noSeedsPollJob: Job? = null
+    private var unhealthySinceMs: Long? = null
 
     @Suppress("UNCHECKED_CAST")
     val uiState: StateFlow<MainUiState> = combine(
@@ -133,7 +174,23 @@ class MainViewModel(
             isKeepScreenOn,
             isTraktAuthenticated,
             isSeedingEnabled,
-            isSearchOpen
+            isSearchOpen,
+            selectedAddonDetails,
+            nextVideo,
+            showNextVideoPopup,
+            minSeedsThreshold,
+            minDownloadSpeedBps,
+            preferredQuality,
+            globalUiStyle,
+            glassEffectsMode,
+            isAutoSwitchOnDeadStream,
+            showNoSeedsBanner,
+            noSeedsReason,
+            globalGlassAlpha,
+            adaptiveGlassContrast,
+            glassHapticsEnabled,
+            hapticsIntensity,
+            liquidGlassTuning
         )
     ) { values ->
         MainUiState(
@@ -169,6 +226,22 @@ class MainViewModel(
             isTraktAuthenticated = values[26] as Boolean,
             isSeedingEnabled = values[27] as Boolean,
             isSearchOpen = values[28] as Boolean,
+            selectedAddonDetails = values[29] as AddonDetailsUiState?,
+            nextVideo = values[30] as com.stremio.core.types.resource.Video?,
+            showNextVideoPopup = values[31] as Boolean,
+            minSeedsThreshold = values[32] as Int,
+            minDownloadSpeedBps = values[33] as Long,
+            preferredQuality = values[34] as String,
+            globalUiStyle = values[35] as String,
+            glassEffectsMode = values[36] as String,
+            isAutoSwitchOnDeadStream = values[37] as Boolean,
+            showNoSeedsBanner = values[38] as Boolean,
+            noSeedsReason = values[39] as String?,
+            globalGlassAlpha = values[40] as Float,
+            adaptiveGlassContrast = values[41] as Boolean,
+            glassHapticsEnabled = values[42] as Boolean,
+            hapticsIntensity = values[43] as String,
+            liquidGlassTuning = values[44] as LiquidGlassTuning,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -181,11 +254,18 @@ class MainViewModel(
         observeContinueWatching()
         observeDiscover()
         observeLibrary()
-        refreshAddons()
+        observeAddons()
         refreshLibrary()
         observeCoreAuth()
         observeStreamingServer()
         restoreCoreSession()
+
+        viewModelScope.launch {
+            while (true) {
+                delay(60_000L)
+                stopServerIfIdle()
+            }
+        }
     }
 
     private fun observeCoreAuth() {
@@ -236,6 +316,22 @@ class MainViewModel(
                     fetchStreamingServerSettingsDirectly()
                 }
             }
+        }
+    }
+
+    private suspend fun startServerInternal() {
+        lastServerActivityMs = System.currentTimeMillis()
+        serverController.start()
+    }
+
+    private suspend fun stopServerIfIdle() {
+        val now = System.currentTimeMillis()
+        val isPlayerActive = playerOpen.value
+        val seeding = isSeedingEnabled.value
+        val isStopped = serverController.state.value is StreamingServerState.Stopped
+
+        if (!isPlayerActive && !seeding && (now - lastServerActivityMs) >= IDLE_TIMEOUT_MS && !isStopped) {
+            serverController.stop()
         }
     }
 
@@ -378,6 +474,71 @@ class MainViewModel(
     fun setKeepScreenOn(enabled: Boolean) {
         authRepository.setKeepScreenOn(enabled)
         isKeepScreenOn.value = enabled
+    }
+
+    fun setMinSeedsThreshold(value: Int) {
+        authRepository.setMinSeedsThreshold(value)
+        minSeedsThreshold.value = value
+    }
+
+    fun setMinDownloadSpeedBps(value: Long) {
+        authRepository.setMinDownloadSpeedBps(value)
+        minDownloadSpeedBps.value = value
+    }
+
+    fun setPreferredQuality(value: String) {
+        authRepository.setPreferredQuality(value)
+        preferredQuality.value = value
+    }
+
+    fun setGlobalUiStyle(value: String) {
+        authRepository.setGlobalUiStyle(value)
+        globalUiStyle.value = if (value == "modern") "modern" else "classic"
+    }
+
+    fun setGlassEffectsMode(value: String) {
+        val resolved = when (value) {
+            "full" -> "full"
+            "static" -> "static"
+            else -> "balanced"
+        }
+        authRepository.setGlassEffectsMode(resolved)
+        glassEffectsMode.value = resolved
+    }
+
+    fun setGlobalGlassAlpha(value: Float) {
+        authRepository.setGlobalGlassAlpha(value)
+        globalGlassAlpha.value = value
+    }
+
+    fun setAdaptiveGlassContrastEnabled(enabled: Boolean) {
+        authRepository.setAdaptiveGlassContrastEnabled(enabled)
+        adaptiveGlassContrast.value = enabled
+    }
+
+    fun setGlassHapticsEnabled(enabled: Boolean) {
+        authRepository.setGlassHapticsEnabled(enabled)
+        glassHapticsEnabled.value = enabled
+    }
+
+    fun setHapticsIntensity(value: String) {
+        authRepository.setHapticsIntensity(value)
+        hapticsIntensity.value = value
+    }
+
+    fun setLiquidGlassTuning(value: LiquidGlassTuning) {
+        val tuning = value.clamped()
+        authRepository.setLiquidGlassTuning(tuning)
+        liquidGlassTuning.value = tuning
+    }
+
+    fun resetLiquidGlassTuning() {
+        setLiquidGlassTuning(LiquidGlassTuning())
+    }
+
+    fun setAutoSwitchOnDeadStream(enabled: Boolean) {
+        authRepository.setAutoSwitchOnDeadStream(enabled)
+        isAutoSwitchOnDeadStream.value = enabled
     }
 
     fun isTraktAuthenticated(): Boolean = authRepository.isTraktAuthenticated()
@@ -556,11 +717,71 @@ class MainViewModel(
 
     fun openStreams(item: CatalogItem) {
         streamsJob?.cancel()
+        val rememberedSelection = localContinueWatchingStreamSelection(item)
+        if (rememberedSelection != null) {
+            openRememberedContinueWatchingStream(item, rememberedSelection)
+            return
+        }
+
+        streamsJob = launchStreamsMenuJob(item)
+    }
+
+    private fun openRememberedContinueWatchingStream(item: CatalogItem, rememberedSelection: LocalStreamSelection) {
+        val isSeries = item.type == "series"
+        streams.value = StreamsUiState(
+            forItem = item,
+            isOpen = false,
+            isLoading = true,
+            isSeries = isSeries,
+            selectedVideoId = if (isSeries) item.continueWatchingVideoId else null,
+        )
+
+        streamsJob = viewModelScope.launch {
+            runCatching { startServerInternal() }
+
+            val videoId = if (isSeries) item.continueWatchingVideoId else null
+            val matchedOption = runCatching {
+                withTimeoutOrNull(30_000) {
+                    catalogRepository.getMetaDetailsFlow(
+                        type = item.type,
+                        id = item.id,
+                        videoId = videoId,
+                        guessStreamPath = !isSeries,
+                    )
+                        .map { details ->
+                            catalogRepository.extractStreams(details)
+                                .mapIndexed { index, coreStream -> buildStreamOption(index, coreStream) }
+                                .firstOrNull { rememberedSelection.matches(it) }
+                        }
+                        .first { it != null }
+                }
+            }.getOrNull()
+
+            if (matchedOption != null) {
+                playStream(matchedOption)
+            } else {
+                streams.value = StreamsUiState()
+                streamsJob = launchStreamsMenuJob(item)
+            }
+        }
+    }
+
+    private fun localContinueWatchingStreamSelection(item: CatalogItem): LocalStreamSelection? {
+        if (!item.isContinueWatching) return null
+        val videoId = continueWatchingVideoKey(item)
+        return authRepository.getLocalStreamSelection(item.type, item.id, videoId)
+    }
+
+    private fun continueWatchingVideoKey(item: CatalogItem): String {
+        return item.continueWatchingVideoId?.takeIf { it.isNotBlank() } ?: item.id
+    }
+
+    private fun launchStreamsMenuJob(item: CatalogItem): Job {
         val isSeries = item.type == "series"
         streams.value = StreamsUiState(forItem = item, isOpen = true, isLoading = true, isSeries = isSeries)
 
-        streamsJob = viewModelScope.launch {
-            runCatching { serverController.start() }
+        return viewModelScope.launch {
+            runCatching { startServerInternal() }
 
             if (isSeries) {
                 val collector = launch {
@@ -569,7 +790,7 @@ class MainViewModel(
                             val videos = catalogRepository.extractVideos(details)
                             if (videos.isNotEmpty()) {
                                 val seasons = videos.mapNotNull { it.seriesInfo?.season?.toInt() }.distinct().sorted()
-                                val defaultSeason = seasons.firstOrNull()
+                                val defaultSeason = defaultSeasonForVideos(videos) ?: seasons.firstOrNull()
                                 val episodes = videos.map { video ->
                                     EpisodeOption(
                                         videoId = video.id,
@@ -577,6 +798,7 @@ class MainViewModel(
                                         episode = video.seriesInfo?.episode?.toInt() ?: 0,
                                         title = video.title,
                                         thumbnail = video.thumbnail,
+                                        releaseDate = formatReleaseDate(video.released),
                                         watched = video.watched,
                                         isCurrent = video.currentVideo,
                                     )
@@ -609,6 +831,7 @@ class MainViewModel(
                             if (streams.value.isOpen) {
                                 streams.value = streams.value.copy(
                                     streams = options,
+                                    releaseDateLabel = movieReleaseDate(details),
                                     isLoading = options.isEmpty(),
                                 )
                             }
@@ -631,12 +854,13 @@ class MainViewModel(
         streams.value = streams.value.copy(
             selectedVideoId = episode.videoId,
             selectedEpisodeLabel = "S${episode.season}E${episode.episode} · ${episode.title}",
+            releaseDateLabel = episode.releaseDate,
             isLoading = true,
             streams = emptyList(),
             error = null,
         )
         streamsJob = viewModelScope.launch {
-            runCatching { serverController.start() }
+            runCatching { startServerInternal() }
             val collector = launch {
                 catalogRepository.getMetaDetailsFlow(type = item.type, id = item.id, videoId = episode.videoId, guessStreamPath = false)
                     .collect { details ->
@@ -665,13 +889,50 @@ class MainViewModel(
         streams.value = streams.value.copy(selectedSeason = season)
     }
 
+    fun selectStreamProvider(provider: String?) {
+        streams.value = streams.value.copy(selectedProvider = provider)
+    }
+
+    fun selectStreamSortCriterion(criterion: StreamSortCriterion) {
+        streams.value = streams.value.copy(sortCriterion = criterion)
+    }
+
     fun backToEpisodes() {
         streams.value = streams.value.copy(
             selectedVideoId = null,
             selectedEpisodeLabel = null,
+            releaseDateLabel = null,
             streams = emptyList(),
             error = null,
         )
+    }
+
+    private fun defaultSeasonForVideos(videos: List<com.stremio.core.types.resource.Video>): Int? {
+        val currentVideo = videos.firstOrNull { it.currentVideo }
+        val lastProgressedVideo = videos
+            .filter { it.watched || (it.progress ?: 0.0) > 0.0 }
+            .maxWithOrNull(
+                compareBy<com.stremio.core.types.resource.Video> { it.seriesInfo?.season ?: 0L }
+                    .thenBy { it.seriesInfo?.episode ?: 0L }
+            )
+        return (currentVideo ?: lastProgressedVideo)?.seriesInfo?.season?.toInt()
+    }
+
+    private fun movieReleaseDate(details: com.stremio.core.models.MetaDetails): String? {
+        val content = details.metaItem?.content
+        return if (content is com.stremio.core.models.LoadableMetaItem.Content.Ready) {
+            formatReleaseDate(content.value.released) ?: content.value.releaseInfo
+        } else {
+            streams.value.forItem?.releaseInfo
+        }
+    }
+
+    private fun formatReleaseDate(timestamp: pbandk.wkt.Timestamp?): String? {
+        val seconds = timestamp?.seconds ?: return null
+        if (seconds <= 0L) return null
+        return SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).apply {
+            timeZone = TimeZone.getDefault()
+        }.format(Date(seconds * 1000L))
     }
 
     private fun buildStreamOption(index: Int, coreStream: CoreStream): StreamOption {
@@ -704,24 +965,185 @@ class MainViewModel(
 
     fun playStream(option: StreamOption) {
         playJob?.cancel()
+        subtitleObserverJob?.cancel()
         streams.value = streams.value.copy(isResolving = true, error = null)
         playJob = viewModelScope.launch {
-            runCatching { serverController.start() }
-            val loaded = playbackRepository.resolveAndLoadStream(option)
+            runCatching { startServerInternal() }
+            val engine = PlayerEngine.fromProfileValue(profileSettings.value?.playerType)
+            val loaded = playbackRepository.resolveAndLoadStream(option, engine)
             if (!loaded) {
                 streams.value = streams.value.copy(isResolving = false, error = "Could not resolve a playable stream.")
                 return@launch
             }
+            rememberLocalStreamSelection(option)
+            lastPlayedOption = option
+            nextVideo.value = null
+            showNextVideoPopup.value = false
+            dismissedNextVideoId = null
+            lastTimeReportMs = 0L
+            showNoSeedsBanner.value = false
+            noSeedsReason.value = null
+            unhealthySinceMs = null
             streams.value = streams.value.copy(isResolving = false, isOpen = false)
             playerOpen.value = true
+            observeAddonSubtitlesForPlayback()
+            startHealthWatch(option)
         }
+    }
+
+    private fun rememberLocalStreamSelection(option: StreamOption) {
+        val currentStreams = streams.value
+        val item = currentStreams.forItem ?: return
+        val videoId = currentStreams.selectedVideoId
+            ?: item.continueWatchingVideoId
+            ?: item.id
+        authRepository.rememberLocalStreamSelection(item.type, item.id, videoId, option)
     }
 
     fun closePlayer() {
         playJob?.cancel()
         playJob = null
+        nextVideoJob?.cancel()
+        nextVideoJob = null
+        subtitleObserverJob?.cancel()
+        subtitleObserverJob = null
+        noSeedsPollJob?.cancel()
+        noSeedsPollJob = null
         playbackRepository.release()
         playerOpen.value = false
+        nextVideo.value = null
+        showNextVideoPopup.value = false
+        showNoSeedsBanner.value = false
+        noSeedsReason.value = null
+
+        lastServerActivityMs = 0L
+        viewModelScope.launch {
+            stopServerIfIdle()
+        }
+    }
+
+    /** Polls live torrent health for a torrent stream and surfaces a fallback when it's dead/too slow. */
+    private fun startHealthWatch(option: StreamOption) {
+        noSeedsPollJob?.cancel()
+        val source = option.core.stream.source
+        if (source !is com.stremio.core.types.resource.Stream.Source.Tramvai) return
+        val infoHash = source.value.infoHash
+        val fileIndex = source.value.fileIdx ?: 0
+
+        noSeedsPollJob = viewModelScope.launch {
+            while (true) {
+                playbackRepository.requestStreamStatistics(infoHash, fileIndex)
+                // Local JNI/HTTP roundtrip to the on-device streaming server; comfortably finishes well under this.
+                delay(800)
+                val stats = playbackRepository.getStreamStatistics()
+                if (stats != null) {
+                    val tooFewSeeds = stats.peers < minSeedsThreshold.value
+                    val tooSlow = minDownloadSpeedBps.value > 0 && stats.downloadSpeed < minDownloadSpeedBps.value
+                    val isNearComplete = stats.streamProgress >= 0.95
+                    if ((tooFewSeeds || tooSlow) && !isNearComplete) {
+                        val since = unhealthySinceMs ?: System.currentTimeMillis().also { unhealthySinceMs = it }
+                        if (System.currentTimeMillis() - since >= 20_000) {
+                            val reason = if (tooFewSeeds) "No seeds found for this stream." else "This stream is downloading too slowly."
+                            if (isAutoSwitchOnDeadStream.value && playNextBestStream()) {
+                                return@launch
+                            }
+                            noSeedsReason.value = reason
+                            showNoSeedsBanner.value = true
+                        }
+                    } else {
+                        unhealthySinceMs = null
+                        showNoSeedsBanner.value = false
+                    }
+                }
+                delay(2_200)
+            }
+        }
+    }
+
+    /** Switches to the best remaining candidate stream, ranked by seeds then closeness to the preferred quality. Returns false if there was nothing else to try. */
+    fun playNextBestStream(): Boolean {
+        val current = lastPlayedOption
+        val candidates = streams.value.streams.filter { it.key != current?.key }
+        val best = candidates.sortedWith(
+            compareByDescending<StreamOption> { parseSeedCount(it.seeds) }
+                .thenByDescending { qualityScore(it.quality, preferredQuality.value) }
+        ).firstOrNull() ?: return false
+        showNoSeedsBanner.value = false
+        playStream(best)
+        return true
+    }
+
+    /** Called every ~500ms by [PlayerScreen]'s position tracker. */
+    fun onPlayerTick(positionMs: Long, durationMs: Long) {
+        lastServerActivityMs = System.currentTimeMillis()
+        if (durationMs <= 0) return
+
+        if (positionMs - lastTimeReportMs >= 5_000 || lastTimeReportMs == 0L) {
+            lastTimeReportMs = positionMs
+            playbackRepository.reportTimeChanged(positionMs, durationMs)
+        }
+
+        val next = nextVideo.value ?: playbackRepository.getNextVideo()?.also { nextVideo.value = it }
+        if (next == null) {
+            showNextVideoPopup.value = false
+            return
+        }
+
+        val notificationDurationMs = profileSettings.value?.nextVideoNotificationDuration ?: return
+        val remainingMs = durationMs - positionMs
+        showNextVideoPopup.value = remainingMs in 0..notificationDurationMs && dismissedNextVideoId != next.id
+    }
+
+    fun onPlayerSeek(positionMs: Long, durationMs: Long) {
+        lastTimeReportMs = positionMs
+        playbackRepository.reportSeek(positionMs, durationMs)
+    }
+
+    fun onPlayerPausedChanged(paused: Boolean) {
+        playbackRepository.reportPausedChanged(paused)
+    }
+
+    fun dismissNextVideoPopup() {
+        dismissedNextVideoId = nextVideo.value?.id
+        showNextVideoPopup.value = false
+    }
+
+    /** Called when ExoPlayer reaches the end of the current stream. */
+    fun onPlaybackEnded() {
+        playbackRepository.reportEnded()
+        val next = nextVideo.value
+        if (profileSettings.value?.bingeWatching == true && next != null) {
+            playNextVideo(next)
+        } else {
+            closePlayer()
+        }
+    }
+
+    /** Plays [video] next: re-resolves its streams and auto-picks one, skipping the streams sheet. */
+    fun playNextVideo(video: com.stremio.core.types.resource.Video) {
+        val item = streams.value.forItem ?: return
+        playbackRepository.reportNextVideo()
+        showNextVideoPopup.value = false
+        nextVideoJob?.cancel()
+        nextVideoJob = viewModelScope.launch {
+            runCatching { startServerInternal() }
+            val collector = launch {
+                catalogRepository.getMetaDetailsFlow(type = item.type, id = item.id, videoId = video.id, guessStreamPath = false)
+                    .collect { details ->
+                        val options = catalogRepository.extractStreams(details).mapIndexed { index, coreStream ->
+                            buildStreamOption(index, coreStream)
+                        }
+                        if (options.isNotEmpty()) {
+                            val preferred = lastPlayedOption?.let { last ->
+                                options.firstOrNull { it.addonTitle == last.addonTitle }
+                            }
+                            playStream(preferred ?: options.first())
+                            nextVideoJob?.cancel()
+                        }
+                    }
+            }
+            withTimeoutOrNull(30_000) { collector.join() }
+        }
     }
 
     fun attachPlayerView(view: android.view.View) = playbackRepository.attachView(view)
@@ -734,6 +1156,32 @@ class MainViewModel(
         playbackRepository.updateSubtitlePrefs(sizePercent, offsetPercent)
     }
 
+    fun getPlayerStreamState(): com.stremio.core.models.Player.StreamState? =
+        playbackRepository.getPlayerStreamState()
+
+    fun rememberAudioTrack(track: PlayerTrackOption) {
+        playbackRepository.rememberAudioTrack(track)
+    }
+
+    fun rememberSubtitleTrack(track: PlayerTrackOption) {
+        playbackRepository.rememberSubtitleTrack(track)
+    }
+
+    fun rememberSubtitlesDisabled() {
+        playbackRepository.rememberSubtitlesDisabled()
+    }
+
+    fun rememberSubtitleStyle(style: PlayerSubtitleStyle) {
+        playbackRepository.rememberSubtitleStyle(style)
+    }
+
+    fun importLocalSubtitle(uri: Uri) {
+        viewModelScope.launch {
+            val track = withContext(Dispatchers.IO) { copyLocalSubtitle(uri) } ?: return@launch
+            playbackRepository.addLocalSubtitle(track)
+        }
+    }
+
     fun getPlayer(): com.stremio.mobile.player.Player? = playbackRepository.getPlayer()
 
     fun acceptIntent(intent: Intent?) {
@@ -742,13 +1190,23 @@ class MainViewModel(
 
     fun startServer() {
         viewModelScope.launch {
-            serverController.start()
+            startServerInternal()
         }
     }
 
     fun stopServer() {
         viewModelScope.launch {
             serverController.stop()
+        }
+    }
+
+    fun onAppForegrounded() {
+        // No-op for now, symmetry/future use
+    }
+
+    fun onAppBackgrounded() {
+        viewModelScope.launch {
+            stopServerIfIdle()
         }
     }
 
@@ -798,12 +1256,6 @@ class MainViewModel(
         isDiscoverSeeAll.value = false
         if (section == MainSection.Settings) {
             fetchStreamingServerSettingsDirectly()
-        }
-        if ((section == MainSection.Addons || section == MainSection.Settings) &&
-            addons.value.official.isEmpty() &&
-            addons.value.community.isEmpty()
-        ) {
-            refreshAddons()
         }
         if (section == MainSection.Library) {
             refreshLibrary()
@@ -968,28 +1420,56 @@ class MainViewModel(
         }
     }
 
-    fun refreshAddons() {
-        addons.value = addons.value.copy(isLoading = true, error = null)
+    private fun observeAddons() {
         viewModelScope.launch {
-            addons.value = try {
-                val official = withContext(Dispatchers.IO) {
-                    catalogRepository.fetchAddons("https://v3-cinemeta.strem.io/addon_catalog/all/official.json")
-                }
-                val community = withContext(Dispatchers.IO) {
-                    catalogRepository.fetchAddons("https://v3-cinemeta.strem.io/addon_catalog/all/community.json")
-                }
-                AddonsUiState(
-                    official = official.take(20),
-                    community = community.take(40),
-                    isLoading = false,
-                )
-            } catch (error: Exception) {
-                AddonsUiState(
-                    isLoading = false,
-                    error = error.message ?: "Unable to load addons",
-                )
+            addonRepository.getAddonsFlow().collect { raw ->
+                addons.value = addonRepository.extractAddonsUiState(raw)
             }
         }
+    }
+
+    fun loadInstalledAddons(type: String? = null) {
+        addonRepository.loadInstalledAddons(type)
+    }
+
+    /** Applies a filter taken from `state.addons.selectableTypes`/`selectableCatalogs`. */
+    fun selectAddonsFilter(request: com.stremio.core.types.addon.ResourceRequest) {
+        addonRepository.selectFilter(request)
+    }
+
+    fun installAddon(item: AddonItem) {
+        addonRepository.installAddon(item)
+    }
+
+    fun uninstallAddon(item: AddonItem) {
+        addonRepository.uninstallAddon(item)
+    }
+
+    fun upgradeAddon(item: AddonItem) {
+        addonRepository.upgradeAddon(item)
+    }
+
+    fun openAddonDetails(transportUrl: String) {
+        addonDetailsJob?.cancel()
+        selectedAddonDetails.value = AddonDetailsUiState(transportUrl = transportUrl)
+        addonDetailsJob = viewModelScope.launch {
+            addonRepository.getAddonDetailsFlow(transportUrl).collect { details ->
+                addonRepository.extractAddonDetailsUiState(details)?.let { selectedAddonDetails.value = it }
+            }
+        }
+    }
+
+    fun closeAddonDetails() {
+        addonDetailsJob?.cancel()
+        addonDetailsJob = null
+        selectedAddonDetails.value = null
+    }
+
+    /** Validates a pasted manifest URL, then opens its details sheet so the user confirms Install there. */
+    fun installAddonByUrl(rawUrl: String): Boolean {
+        val url = rawUrl.trim()
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return false
+        return runCatching { URL(url) }.onSuccess { openAddonDetails(url) }.isSuccess
     }
 
     fun login(email: String, password: String) {
@@ -1055,5 +1535,51 @@ class MainViewModel(
                 android.util.Log.e("MainViewModel", "Failed to load discover request", e)
             }
         }
+    }
+
+    private fun observeAddonSubtitlesForPlayback() {
+        subtitleObserverJob?.cancel()
+        val seen = mutableSetOf<String>()
+        subtitleObserverJob = viewModelScope.launch {
+            playbackRepository.playerFlow().collect { player ->
+                val newTracks = playbackRepository.extractAddonSubtitles(player)
+                    .filter { seen.add(it.id) }
+                if (newTracks.isNotEmpty()) {
+                    playbackRepository.addExternalSubtitleTracks(newTracks)
+                }
+            }
+        }
+    }
+
+    private fun copyLocalSubtitle(uri: Uri): ExternalSubtitle? {
+        val displayName = queryDisplayName(uri) ?: "subtitle-${System.currentTimeMillis()}.srt"
+        val safeName = displayName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val outDir = File(appContext.cacheDir, "local-subtitles").apply { mkdirs() }
+        val outFile = File(outDir, "${System.currentTimeMillis()}-$safeName")
+        appContext.contentResolver.openInputStream(uri)?.use { input ->
+            outFile.outputStream().use { output -> input.copyTo(output) }
+        } ?: return null
+
+        return ExternalSubtitle(
+            id = "local:${outFile.name}",
+            lang = LanguageCatalog.LOCAL_SUBTITLES_LANGUAGE,
+            url = Uri.fromFile(outFile).toString(),
+            label = displayName,
+            source = "Local",
+            origin = "LOCAL",
+            embedded = false,
+            local = true,
+        )
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        return appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(0)
+                } else {
+                    null
+                }
+            }
     }
 }

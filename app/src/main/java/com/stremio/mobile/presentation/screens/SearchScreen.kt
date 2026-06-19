@@ -59,6 +59,8 @@ import com.stremio.mobile.data.model.CatalogShelf
 import com.stremio.mobile.presentation.components.PosterShelf
 import com.stremio.mobile.presentation.components.PosterTile
 import com.stremio.mobile.presentation.components.ShelfMode
+import com.stremio.mobile.presentation.components.LocalGlobalUiTheme
+import com.stremio.mobile.presentation.components.ThemedIconButton
 
 /**
  * Full-screen search results, shown whenever the query is non-blank. Reuses the Discover-style
@@ -98,6 +100,12 @@ fun SearchResultsScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val globalTheme = LocalGlobalUiTheme.current
+    val fieldContainerColor = if (globalTheme.style == "modern") {
+        Color.White.copy(alpha = (globalTheme.glassAlpha * 0.42f + 0.10f).coerceIn(0.10f, 0.36f))
+    } else {
+        GlassSurface
+    }
 
     Column(
         modifier = modifier
@@ -117,16 +125,13 @@ fun SearchResultsScreen(
                 .padding(start = 11.dp, top = 6.dp, end = ScreenGutter, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
+            ThemedIconButton(
                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = "Back",
-                tint = Color.White,
+                onClick = onBack,
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(GlassSurface)
-                    .clickable(onClick = onBack)
-                    .padding(9.dp),
+                    .size(40.dp),
+                containerColor = GlassSurface,
             )
             OutlinedTextField(
                 value = localQuery,
@@ -160,8 +165,8 @@ fun SearchResultsScreen(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = GlassSurface,
-                    unfocusedContainerColor = GlassSurface,
+                    focusedContainerColor = fieldContainerColor,
+                    unfocusedContainerColor = fieldContainerColor,
                     focusedBorderColor = Color(0x33FFFFFF),
                     unfocusedBorderColor = Color(0x19FFFFFF),
                     cursorColor = AccentPurple,

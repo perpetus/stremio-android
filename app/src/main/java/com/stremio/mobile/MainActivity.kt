@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
                     authRepository = app.container.authRepository,
                     boardRepository = app.container.boardRepository,
                     catalogRepository = app.container.catalogRepository,
+                    addonRepository = app.container.addonRepository,
                     playbackRepository = app.container.playbackRepository,
                     serverController = app.container.serverController,
                     core = app.container.core,
@@ -59,9 +60,20 @@ class MainActivity : ComponentActivity() {
         viewModel.acceptIntent(intent)
     }
 
+    override fun onStart() {
+        super.onStart()
+        viewModel.onAppForegrounded()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        viewModel.onAppBackgrounded()
+    }
+
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= 33) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 }
+
