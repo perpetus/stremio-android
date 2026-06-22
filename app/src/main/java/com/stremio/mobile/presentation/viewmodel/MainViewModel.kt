@@ -274,6 +274,7 @@ class MainViewModel(
                 account.value = accountState
                 isRestoringSession.value = false
                 if (accountState.isAuthenticated && accountState.authKey != null) {
+                    authInFlight = false
                     authRepository.saveAuthKeyAndEmail(accountState.authKey, accountState.email ?: "")
                     refreshLibrary()
                 }
@@ -322,6 +323,12 @@ class MainViewModel(
     private suspend fun startServerInternal() {
         lastServerActivityMs = System.currentTimeMillis()
         serverController.start()
+        when (val state = serverController.state.value) {
+            is StreamingServerState.Ready -> Unit
+            is StreamingServerState.Failed -> error(state.message)
+            StreamingServerState.Starting -> error("Streaming server is still starting")
+            StreamingServerState.Stopped -> error("Streaming server did not start")
+        }
     }
 
     private suspend fun stopServerIfIdle() {
@@ -1021,7 +1028,16 @@ class MainViewModel(
         subtitleObserverJob?.cancel()
         streams.value = streams.value.copy(isResolving = true, error = null)
         playJob = viewModelScope.launch {
-            runCatching { startServerInternal() }
+            if (streamRequiresLocalServer(option)) {
+                runCatching { startServerInternal() }
+                    .onFailure { error ->
+                        streams.value = streams.value.copy(
+                            isResolving = false,
+                            error = "Streaming server failed to start: ${error.message ?: "Unknown error"}",
+                        )
+                        return@launch
+                    }
+            }
             val engine = PlayerEngine.fromProfileValue(profileSettings.value?.playerType)
             val loaded = playbackRepository.resolveAndLoadStream(
                 option = option,
@@ -1046,6 +1062,14 @@ class MainViewModel(
             observeAddonSubtitlesForPlayback()
             startHealthWatch(option)
         }
+    }
+
+    private fun streamRequiresLocalServer(option: StreamOption): Boolean {
+        if (option.core.stream.source is com.stremio.core.types.resource.Stream.Source.Tramvai) {
+            return true
+        }
+        val directUrl = runCatching { core.directUrl(option.core.stream) }.getOrNull()
+        return directUrl?.startsWith(StremioCore.STREAMING_SERVER_BASE) == true
     }
 
     private fun rememberLocalStreamSelection(option: StreamOption) {
@@ -1549,6 +1573,17 @@ class MainViewModel(
         }
     }
 
+    fun loginWithFacebook(token: String) {
+        authInFlight = true
+        account.value = account.value.copy(isLoading = true, error = null)
+        viewModelScope.launch {
+            runCatching { authRepository.loginWithFacebook(token) }.onFailure {
+                authInFlight = false
+                account.value = account.value.copy(isLoading = false, error = it.message ?: "Facebook login failed")
+            }
+        }
+    }
+
     fun signup(email: String, password: String, marketingConsent: Boolean) {
         authInFlight = true
         account.value = account.value.copy(isLoading = true, error = null)
@@ -1569,6 +1604,11 @@ class MainViewModel(
 
     fun clearAccountError() {
         account.value = account.value.copy(error = null)
+    }
+
+    fun setAccountError(message: String) {
+        authInFlight = false
+        account.value = account.value.copy(isLoading = false, error = message)
     }
 
     fun refreshLibrary() {

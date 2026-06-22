@@ -61,6 +61,9 @@ android {
     buildTypes {
         debug {
             matchingFallbacks.add("release")
+            signingConfigs.findByName("release")?.let {
+                signingConfig = it
+            }
         }
         release {
             isMinifyEnabled = true
@@ -103,6 +106,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0-rc01")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0-rc01")
     implementation("androidx.navigation:navigation-compose:2.9.8")
+    implementation("androidx.fragment:fragment:1.5.4")
+
+    implementation("com.facebook.android:facebook-login:18.2.3")
 
     implementation("androidx.media3:media3-exoplayer:1.10.1")
     implementation("androidx.media3:media3-ui:1.10.1")

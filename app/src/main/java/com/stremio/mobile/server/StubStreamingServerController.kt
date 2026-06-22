@@ -10,13 +10,14 @@ class StubStreamingServerController : StreamingServerController {
     override val state: StateFlow<StreamingServerState> = mutableState
 
     override suspend fun start() {
-        if (mutableState.value is StreamingServerState.Ready) {
+        val current = mutableState.value
+        if (current is StreamingServerState.Ready || current is StreamingServerState.Failed) {
             return
         }
 
         mutableState.value = StreamingServerState.Starting
         delay(450)
-        mutableState.value = StreamingServerState.Ready("http://127.0.0.1:11470")
+        mutableState.value = StreamingServerState.Failed("stream_server JNI library is unavailable")
     }
 
     override suspend fun stop() {

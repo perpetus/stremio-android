@@ -254,6 +254,10 @@ class AuthRepository(
         core.loginWithToken(authKey)
     }
 
+    suspend fun loginWithFacebook(token: String) {
+        core.loginWithFacebook(token)
+    }
+
     suspend fun login(email: String, password: String) {
         core.login(email.trim(), password)
     }

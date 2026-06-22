@@ -96,6 +96,10 @@ class StremioCore(context: Context) {
         authenticate(AuthRequest(AuthRequest.Type.LoginWithToken(AuthRequest.LoginWithToken(token))))
     }
 
+    fun loginWithFacebook(token: String) {
+        authenticate(AuthRequest(AuthRequest.Type.Facebook(AuthRequest.Facebook(token))))
+    }
+
     fun login(email: String, password: String) {
         authenticate(
             AuthRequest(AuthRequest.Type.Login(AuthRequest.Login(email = email, password = password, facebook = false))),

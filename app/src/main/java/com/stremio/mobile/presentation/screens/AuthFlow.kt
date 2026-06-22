@@ -1,5 +1,8 @@
 package com.stremio.mobile.presentation.screens
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +29,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -34,13 +38,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.facebook.FacebookCallback
+import com.facebook.FacebookException
+import com.facebook.login.LoginManager
+import com.facebook.login.LoginResult
 import com.stremio.mobile.core.theme.AccentPurple
 import com.stremio.mobile.core.theme.MutedText
 import com.stremio.mobile.core.theme.StremioBackground
+import com.stremio.mobile.auth.FacebookLoginBridge
 import com.stremio.mobile.presentation.components.StremioMark
 import com.stremio.mobile.presentation.components.ThemedButton
 import com.stremio.mobile.presentation.components.ThemedTextButton
@@ -56,6 +66,8 @@ fun AuthFlow(
     isLoading: Boolean,
     error: String?,
     onLogin: (String, String) -> Unit,
+    onFacebookLogin: (String) -> Unit,
+    onFacebookLoginError: (String) -> Unit,
     onSignup: (String, String, Boolean) -> Unit,
     onClearError: () -> Unit,
 ) {
@@ -63,10 +75,15 @@ fun AuthFlow(
 
     when (screen) {
         AuthScreen.Intro -> IntroScreen(
+            isLoading = isLoading,
+            error = error,
             onLoginClicked = {
                 onClearError()
                 screen = AuthScreen.Login
             },
+            onFacebookLogin = onFacebookLogin,
+            onFacebookLoginError = onFacebookLoginError,
+            onClearError = onClearError,
             onSignupClicked = {
                 onClearError()
                 screen = AuthScreen.Signup
@@ -105,9 +122,40 @@ fun AuthFlow(
 
 @Composable
 private fun IntroScreen(
+    isLoading: Boolean,
+    error: String?,
     onLoginClicked: () -> Unit,
+    onFacebookLogin: (String) -> Unit,
+    onFacebookLoginError: (String) -> Unit,
+    onClearError: () -> Unit,
     onSignupClicked: () -> Unit,
 ) {
+    val context = LocalContext.current
+    DisposableEffect(onFacebookLogin, onFacebookLoginError) {
+        val callback = object : FacebookCallback<LoginResult> {
+            override fun onSuccess(result: LoginResult) {
+                val token = result.accessToken.token
+                if (token.isBlank()) {
+                    onFacebookLoginError("Facebook did not return an access token.")
+                } else {
+                    onFacebookLogin(token)
+                }
+            }
+
+            override fun onCancel() {
+                onFacebookLoginError("Facebook login was cancelled.")
+            }
+
+            override fun onError(error: FacebookException) {
+                onFacebookLoginError(error.localizedMessage ?: "Facebook login failed")
+            }
+        }
+        LoginManager.getInstance().registerCallback(FacebookLoginBridge.callbackManager, callback)
+        onDispose {
+            LoginManager.getInstance().unregisterCallback(FacebookLoginBridge.callbackManager)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -157,12 +205,37 @@ private fun IntroScreen(
                 lineHeight = 24.sp,
             )
             Spacer(modifier = Modifier.height(34.dp))
-            AuthButton(text = "Sign up", onClick = onSignupClicked)
+            AuthButton(text = "Sign up", enabled = !isLoading, onClick = onSignupClicked)
             AuthButton(
-                text = "Continue with Facebook",
+                text = if (isLoading) "Connecting..." else "Continue with Facebook",
                 containerColor = Color(0xFF126FFF),
-                onClick = {},
+                enabled = !isLoading,
+                onClick = {
+                    onClearError()
+                    val activity = context.findActivity()
+                    if (activity == null) {
+                        onFacebookLoginError("Facebook login requires an active app screen.")
+                    } else {
+                        LoginManager.getInstance().logInWithReadPermissions(activity, listOf("email"))
+                    }
+                },
             )
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .size(28.dp),
+                    color = Color.White,
+                )
+            }
+            if (error != null) {
+                Text(
+                    text = error,
+                    color = Color(0xFFFFC66D),
+                    fontSize = 14.sp,
+                    lineHeight = 19.sp,
+                )
+            }
             Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "Already have an account?",
@@ -177,6 +250,12 @@ private fun IntroScreen(
             )
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 @Composable

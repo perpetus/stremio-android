@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Stremio</string>
+    <string name="facebook_app_id">1537119779906825</string>
+    <string name="facebook_client_token">12de6409b8ae9b60598e7a29804a9404</string>
+    <string name="fb_login_protocol_scheme">fb_stremio</string>
     <string name="server_notification_channel">Streaming Server</string>
     <string name="server_notification_title">Stremio</string>
     <string name="server_notification_text">Preparing native mobile shell</string>
