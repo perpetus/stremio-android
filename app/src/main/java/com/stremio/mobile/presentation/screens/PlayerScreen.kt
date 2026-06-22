@@ -280,9 +280,27 @@ fun PlayerScreen(
         onSeekReported(pos, durationMs)
     }
 
-    LaunchedEffect(player) {
+    LaunchedEffect(player, activeUri) {
+        val state = player?.runtimeState?.value ?: PlayerRuntimeState()
+        isPlaying = state.isPlaying
+        isBuffering = state.isBuffering
+        positionMs = state.positionMs
+        durationMs = state.durationMs
+        bufferedPositionMs = state.bufferedPositionMs
+        currentSpeed = state.speed
         hasReportedEnded = false
-        playbackError = null
+        playbackError = state.error
+        showControls = true
+        lastActivityTime = System.currentTimeMillis()
+        activeGestureType = null
+        showGestureOverlay = false
+        seekPreviewMs = null
+        showLeftSeekIndicator = false
+        showRightSeekIndicator = false
+        showAudioDialog = false
+        showSubtitleDialog = false
+        showStatsPanel = false
+        torrentStats = null
     }
 
     LaunchedEffect(runtimeState) {
@@ -517,7 +535,7 @@ fun PlayerScreen(
                 .background(Color.Black),
         ) {
             // Backend-provided player view.
-            key(player) {
+            key(player, activeUri) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -539,7 +557,7 @@ fun PlayerScreen(
                 }
             }
 
-        DisposableEffect(player) {
+        DisposableEffect(player, activeUri) {
             onDispose { onDetachView() }
         }
 
@@ -547,7 +565,7 @@ fun PlayerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
+                .pointerInput(player, activeUri) {
                     // Slightly lower than the system touchSlop so vertical/horizontal swipes
                     // are recognized sooner and feel more responsive (bigger effective hitbox).
                     val gestureSlop = viewConfiguration.touchSlop * 0.6f

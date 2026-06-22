@@ -7,6 +7,8 @@ fun stringPropertyOrEnv(name: String): String? =
     (findProperty(name) as? String)?.takeIf { it.isNotBlank() }
         ?: System.getenv(name)?.takeIf { it.isNotBlank() }
 
+val supportedAbis = listOf("arm64-v8a", "x86_64")
+
 val releaseSigningValues = listOf(
     stringPropertyOrEnv("ANDROID_KEYSTORE_FILE"),
     stringPropertyOrEnv("ANDROID_KEYSTORE_PASSWORD"),
@@ -32,7 +34,16 @@ android {
         versionCode = stringPropertyOrEnv("VERSION_CODE")?.toIntOrNull() ?: 1
         versionName = stringPropertyOrEnv("VERSION_NAME") ?: "0.1.0"
         ndk {
-            abiFilters.addAll(setOf("arm64-v8a", "x86_64"))
+            abiFilters.addAll(supportedAbis)
+        }
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include(*supportedAbis.toTypedArray())
+            isUniversalApk = true
         }
     }
 

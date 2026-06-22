@@ -29,7 +29,11 @@ class PlaybackRepository(
 
     fun release() = playbackManager.release()
 
-    suspend fun resolveAndLoadStream(option: StreamOption, engine: PlayerEngine = PlayerEngine.EXO): Boolean {
+    suspend fun resolveAndLoadStream(
+        option: StreamOption,
+        engine: PlayerEngine = PlayerEngine.EXO,
+        displayTitle: String? = null,
+    ): Boolean {
         val url = runCatching { core.resolvePlayableUrl(option.core).first() }.getOrNull()
             ?: core.directUrl(option.core.stream)
 
@@ -54,7 +58,7 @@ class PlaybackRepository(
 
         playbackManager.load(
             uri = Uri.parse(url),
-            title = option.name,
+            title = displayTitle ?: option.name,
             startPositionMs = startPositionMs,
             subtitles = subtitles,
             preferredSubtitleLang = preferredLang,

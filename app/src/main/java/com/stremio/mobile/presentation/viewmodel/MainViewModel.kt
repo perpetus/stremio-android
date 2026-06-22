@@ -749,6 +749,14 @@ class MainViewModel(
                         guessStreamPath = !isSeries,
                     )
                         .map { details ->
+                            if (isSeries && videoId != null) {
+                                episodeDisplayInfo(details, videoId)?.let { episode ->
+                                    streams.value = streams.value.copy(
+                                        selectedEpisodeLabel = episode.label,
+                                        releaseDateLabel = episode.releaseDate,
+                                    )
+                                }
+                            }
                             catalogRepository.extractStreams(details)
                                 .mapIndexed { index, coreStream -> buildStreamOption(index, coreStream) }
                                 .firstOrNull { rememberedSelection.matches(it) }
@@ -853,7 +861,7 @@ class MainViewModel(
         streamsJob?.cancel()
         streams.value = streams.value.copy(
             selectedVideoId = episode.videoId,
-            selectedEpisodeLabel = "S${episode.season}E${episode.episode} · ${episode.title}",
+            selectedEpisodeLabel = episodeDisplayLabel(episode.season, episode.episode, episode.title),
             releaseDateLabel = episode.releaseDate,
             isLoading = true,
             streams = emptyList(),
@@ -927,6 +935,51 @@ class MainViewModel(
         }
     }
 
+    private data class EpisodeDisplayInfo(
+        val label: String,
+        val releaseDate: String?,
+    )
+
+    private fun episodeDisplayInfo(
+        details: com.stremio.core.models.MetaDetails,
+        videoId: String,
+    ): EpisodeDisplayInfo? {
+        return catalogRepository.extractVideos(details)
+            .firstOrNull { it.id == videoId }
+            ?.let { video ->
+                EpisodeDisplayInfo(
+                    label = episodeDisplayLabel(
+                        season = video.seriesInfo?.season?.toInt(),
+                        episode = video.seriesInfo?.episode?.toInt(),
+                        title = video.title,
+                    ) ?: video.title,
+                    releaseDate = formatReleaseDate(video.released),
+                )
+            }
+    }
+
+    private fun episodeDisplayLabel(season: Int?, episode: Int?, title: String?): String? {
+        val cleanTitle = title?.takeIf { it.isNotBlank() }
+        val number = if ((season ?: 0) > 0 && (episode ?: 0) > 0) {
+            "S${season}E${episode}"
+        } else {
+            null
+        }
+        return listOfNotNull(cleanTitle, number)
+            .joinToString(" · ")
+            .takeIf { it.isNotBlank() }
+    }
+
+    private fun playbackDisplayTitle(): String? {
+        val current = streams.value
+        val item = current.forItem ?: return null
+        return if (current.isSeries) {
+            current.selectedEpisodeLabel?.takeIf { it.isNotBlank() } ?: item.name
+        } else {
+            item.name
+        }
+    }
+
     private fun formatReleaseDate(timestamp: pbandk.wkt.Timestamp?): String? {
         val seconds = timestamp?.seconds ?: return null
         if (seconds <= 0L) return null
@@ -970,7 +1023,11 @@ class MainViewModel(
         playJob = viewModelScope.launch {
             runCatching { startServerInternal() }
             val engine = PlayerEngine.fromProfileValue(profileSettings.value?.playerType)
-            val loaded = playbackRepository.resolveAndLoadStream(option, engine)
+            val loaded = playbackRepository.resolveAndLoadStream(
+                option = option,
+                engine = engine,
+                displayTitle = playbackDisplayTitle(),
+            )
             if (!loaded) {
                 streams.value = streams.value.copy(isResolving = false, error = "Could not resolve a playable stream.")
                 return@launch
@@ -1124,6 +1181,15 @@ class MainViewModel(
         val item = streams.value.forItem ?: return
         playbackRepository.reportNextVideo()
         showNextVideoPopup.value = false
+        streams.value = streams.value.copy(
+            selectedVideoId = video.id,
+            selectedEpisodeLabel = episodeDisplayLabel(
+                season = video.seriesInfo?.season?.toInt(),
+                episode = video.seriesInfo?.episode?.toInt(),
+                title = video.title,
+            ),
+            releaseDateLabel = formatReleaseDate(video.released),
+        )
         nextVideoJob?.cancel()
         nextVideoJob = viewModelScope.launch {
             runCatching { startServerInternal() }

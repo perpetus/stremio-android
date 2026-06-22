@@ -37,9 +37,12 @@ jobs:
       - name: Compile and assemble debug
         run: ./gradlew :app:compileDebugKotlin :app:assembleDebug --warning-mode all
 
-      - name: Upload debug APK
+      - name: Verify debug APK outputs
+        run: python .github/scripts/verify-apk-outputs.py app/build/outputs/apk/debug arm64-v8a x86_64 universal
+
+      - name: Upload debug APKs
         uses: actions/upload-artifact@v4
         with:
-          name: stremio-mobile-debug-apk
+          name: stremio-mobile-debug-apks
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error

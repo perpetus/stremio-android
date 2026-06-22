@@ -778,6 +778,7 @@ private fun ModernTimeline(
                 TimelineTrack(
                     progress = displayProgress,
                     bufferedProgress = (state.bufferedPositionMs.toFloat() / duration).coerceIn(0f, 1f),
+                    showThumb = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Slider(
@@ -799,7 +800,7 @@ private fun ModernTimeline(
                         isScrubbing = false
                     },
                     colors = SliderDefaults.colors(
-                        thumbColor = Color.White,
+                        thumbColor = Color.Transparent,
                         activeTrackColor = Color.Transparent,
                         inactiveTrackColor = Color.Transparent,
                         activeTickColor = Color.Transparent,
@@ -836,7 +837,8 @@ private fun ModernTimeline(
 private fun TimelineTrack(
     bufferedProgress: Float,
     modifier: Modifier = Modifier,
-    progress: Float = 0f
+    progress: Float = 0f,
+    showThumb: Boolean = false,
 ) {
     Canvas(
         modifier = modifier
@@ -890,6 +892,26 @@ private fun TimelineTrack(
                 topLeft = Offset(startX, centerY - trackHeight / 2),
                 size = Size(trackWidth * progress, trackHeight),
                 cornerRadius = CornerRadius(trackHeight / 2),
+            )
+        }
+
+        if (showThumb) {
+            val handleWidth = 18.dp.toPx()
+            val handleHeight = 8.dp.toPx()
+            val handleX = (startX + trackWidth * progress - handleWidth / 2)
+                .coerceIn(startX - handleWidth / 2, startX + trackWidth - handleWidth / 2)
+
+            drawRoundRect(
+                color = Color.White.copy(alpha = 0.96f),
+                topLeft = Offset(handleX, centerY - handleHeight / 2),
+                size = Size(handleWidth, handleHeight),
+                cornerRadius = CornerRadius(handleHeight / 2),
+            )
+            drawRoundRect(
+                color = Color.White.copy(alpha = 0.55f),
+                topLeft = Offset(handleX + handleWidth * 0.18f, centerY - handleHeight * 0.42f),
+                size = Size(handleWidth * 0.64f, handleHeight * 0.18f),
+                cornerRadius = CornerRadius(handleHeight * 0.09f),
             )
         }
     }

@@ -38,10 +38,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import com.stremio.mobile.core.theme.AccentPurple
 import com.stremio.mobile.core.theme.GlassSurface
 import com.stremio.mobile.core.theme.MutedText
@@ -300,36 +302,68 @@ private fun EpisodeRow(
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-        // Episode number badge
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (episode.isCurrent) AccentPurple else Color(0xFF2A2A3E)),
-            contentAlignment = Alignment.Center,
+                .width(86.dp)
+                .height(48.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF202033)),
         ) {
-            Text(
-                text = "${episode.episode}",
-                color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            if (!episode.thumbnail.isNullOrBlank()) {
+                AsyncImage(
+                    model = episode.thumbnail,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "E${episode.episode}",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(5.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (episode.isCurrent) AccentPurple else Color(0xB3000000))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = "E${episode.episode}",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = episode.title,
+                text = "E${episode.episode}. ${episode.title}",
                 color = Color.White,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = "S${episode.season}E${episode.episode}",
-                color = MutedText,
-                fontSize = 12.sp,
-            )
+            episode.releaseDate?.takeIf { it.isNotBlank() }?.let { releaseDate ->
+                Text(
+                    text = releaseDate,
+                    color = MutedText,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
             if (episode.watched) {
                 Box(

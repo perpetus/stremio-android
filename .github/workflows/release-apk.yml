@@ -91,35 +91,33 @@ jobs:
       - name: Prepare release assets
         shell: bash
         run: |
-          apk_path="$(find app/build/outputs/apk/release -name "*.apk" | sort | head -n 1)"
-          if [[ -z "${apk_path}" ]]; then
-            echo "::error::Release APK not found"
-            exit 1
-          fi
-
-          apk_name="StremioMobile-v${VERSION_NAME}-release.apk"
-          cp "${apk_path}" "${apk_name}"
-          sha256sum "${apk_name}" > "${apk_name}.sha256"
+          rm -rf dist
+          python .github/scripts/collect-apks.py \
+            --metadata app/build/outputs/apk/release/output-metadata.json \
+            --apk-dir app/build/outputs/apk/release \
+            --output-dir dist \
+            --version-name "${VERSION_NAME}" \
+            --build-type release
 
           mapping_path="app/build/outputs/mapping/release/mapping.txt"
           if [[ -f "${mapping_path}" ]]; then
-            cp "${mapping_path}" "StremioMobile-v${VERSION_NAME}-mapping.txt"
+            cp "${mapping_path}" "dist/StremioMobile-v${VERSION_NAME}-mapping.txt"
           fi
 
-          {
-            echo "APK_NAME=${apk_name}"
-            echo "MAPPING_NAME=StremioMobile-v${VERSION_NAME}-mapping.txt"
-          } >> "${GITHUB_ENV}"
+      - name: Verify release assets
+        shell: bash
+        run: |
+          test -f "dist/StremioMobile-v${VERSION_NAME}-arm64-v8a-release.apk"
+          test -f "dist/StremioMobile-v${VERSION_NAME}-x86_64-release.apk"
+          test -f "dist/StremioMobile-v${VERSION_NAME}-universal-release.apk"
+          test -f "dist/StremioMobile-v${VERSION_NAME}-SHA256SUMS.txt"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: stremio-mobile-release-${{ env.VERSION_NAME }}
-          path: |
-            ${{ env.APK_NAME }}
-            ${{ env.APK_NAME }}.sha256
-            ${{ env.MAPPING_NAME }}
-          if-no-files-found: warn
+          path: dist/*
+          if-no-files-found: error
 
       - name: Publish GitHub Release
         shell: bash
@@ -132,9 +130,4 @@ jobs:
               --notes "Automated APK release for ${VERSION_NAME}."
           fi
 
-          assets=("${APK_NAME}" "${APK_NAME}.sha256")
-          if [[ -f "${MAPPING_NAME}" ]]; then
-            assets+=("${MAPPING_NAME}")
-          fi
-
-          gh release upload "${RELEASE_TAG}" "${assets[@]}" --clobber
+          gh release upload "${RELEASE_TAG}" dist/* --clobber

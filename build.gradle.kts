@@ -62,9 +62,10 @@ abstract class InstallReleaseApk @Inject constructor(
         val metadataFile = dir.resolve("output-metadata.json")
         if (metadataFile.isFile) {
             val outputFileName = Regex("\"outputFile\"\\s*:\\s*\"([^\"]+\\.apk)\"")
-                .find(metadataFile.readText())
-                ?.groupValues
-                ?.get(1)
+                .findAll(metadataFile.readText())
+                .map { it.groupValues[1] }
+                .sortedWith(compareBy<String> { !it.contains("universal", ignoreCase = true) }.thenBy { it })
+                .firstOrNull()
             if (!outputFileName.isNullOrBlank()) {
                 return dir.resolve(outputFileName).takeIf { it.isFile }
                     ?: throw GradleException("Release APK listed in ${metadataFile.absolutePath} was not found: $outputFileName")
@@ -72,7 +73,11 @@ abstract class InstallReleaseApk @Inject constructor(
         }
 
         return dir.listFiles { file -> file.isFile && file.extension.equals("apk", ignoreCase = true) }
-            ?.sortedWith(compareBy<File> { it.name.contains("unsigned", ignoreCase = true) }.thenBy { it.name })
+            ?.sortedWith(
+                compareBy<File> { !it.name.contains("universal", ignoreCase = true) }
+                    .thenBy { it.name.contains("unsigned", ignoreCase = true) }
+                    .thenBy { it.name }
+            )
             ?.firstOrNull()
             ?: throw GradleException("No release APK found in ${dir.absolutePath}.")
     }
