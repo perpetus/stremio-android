@@ -120,6 +120,7 @@ jobs:
           VCPKGRS_TRIPLET: arm64-android
           PKG_CONFIG_PATH: ${{ github.workspace }}/vcpkg_installed/arm64-android/lib/pkgconfig
           PKG_CONFIG_SYSROOT_DIR: ${{ github.workspace }}/vcpkg_installed/arm64-android
+          OPENSSL_DIR: ${{ github.workspace }}/vcpkg_installed/arm64-android
 
       - name: Build x86_64
         working-directory: stream-server/server
@@ -131,6 +132,7 @@ jobs:
           VCPKGRS_TRIPLET: x64-android
           PKG_CONFIG_PATH: ${{ github.workspace }}/vcpkg_installed/x64-android/lib/pkgconfig
           PKG_CONFIG_SYSROOT_DIR: ${{ github.workspace }}/vcpkg_installed/x64-android
+          OPENSSL_DIR: ${{ github.workspace }}/vcpkg_installed/x64-android
 
       - name: Prepare JNI libs
         run: |
