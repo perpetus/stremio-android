@@ -6,11 +6,11 @@ Native Android client for Stremio built with Kotlin, Jetpack Compose, Kotlin Mul
 [![Release APK](https://github.com/perpetus/stremio-android/actions/workflows/release-apk.yml/badge.svg)](https://github.com/perpetus/stremio-android/actions/workflows/release-apk.yml)
 
 > [!WARNING]
-> This project is in active testing. Playback, addon handling, subtitle behavior, MPV support, and Liquid Glass UI controls are still being refined.
+> This is a community Android client, not the official Stremio app. It is under active development, with signed APKs, CI builds, and ongoing fixes published in this repository.
 
 ## Overview
 
-Stremio Mobile is an open-source Android streaming app experiment focused on bringing a modern native Stremio experience to phones and tablets. It combines the Stremio addon ecosystem with a Compose-first Android UI, local torrent/HTTP streaming, selectable internal players, web-parity subtitle and audio controls, and a configurable Liquid Glass interface.
+Stremio Mobile is an open-source Android streaming app focused on bringing a modern native Stremio experience to phones and tablets. It combines the Stremio addon ecosystem with a Compose-first Android UI, local torrent/HTTP streaming, selectable internal players, web-parity subtitle and audio controls, and a configurable Liquid Glass interface.
 
 This repository is useful for developers searching for:
 
@@ -22,6 +22,22 @@ This repository is useful for developers searching for:
 - Rust JNI streaming server Android app
 - Liquid Glass Android UI components
 
+## Why Use This Instead of the Official App?
+
+This project is built for users who want a transparent, performance-focused Android Stremio experience with more local control than the standard app.
+
+| Area | What this app focuses on |
+|---|---|
+| **Official Stremio compatibility** | Uses the Stremio core through the Kotlin/JNI core bridge for account, addons, catalogs, library, meta details, streams, player state, and sync behavior. The app replaces the Android interface and local streaming layer, not the Stremio addon ecosystem. |
+| **Interface speed** | Native Kotlin/Compose screens with a low-cost Classic UI and configurable Liquid Glass modes, including a Performance mode for lower-end phones. |
+| **Streaming performance** | A bundled Rust [`stream-server`](https://github.com/perpetus/stream-server) integrated through JNI for local torrent/HTTP streaming instead of a Node.js-style local server runtime on Android. |
+| **Memory use** | The stream-server project documents an approximate `~50MB` memory profile compared with `~200MB+` for Stremio `server.js`, with native Rust performance as the design goal. |
+| **Seeking and downloads** | stream-server supports HTTP range requests for instant seeking, HLS transcoding, torrent stats, archive streaming, subtitle extraction, and video probing. |
+| **Anime and advanced subtitles** | MPV can be selected as an internal player, with ASS subtitle styling controls, subtitle delay/size/position, local subtitle import, and web-parity subtitle language/variant menus. |
+| **Transparency** | The Android app, release workflow, native packaging, MPV wrapper, and streaming server integration are developed in public repositories. GitHub Releases publish signed APKs plus SHA256 checksums. |
+
+The official app is the official support channel. This app is the open-source, native Android alternative for users who want the Stremio core and addon ecosystem behind a faster-moving Android UI, a Rust-powered local streaming engine, selectable ExoPlayer/MPV playback, richer subtitle controls, and APKs that can be inspected from source to release.
+
 ## Screenshot
 
 <p align="center">
@@ -31,6 +47,7 @@ This repository is useful for developers searching for:
 ## Features
 
 - **Native Android UI** built with Kotlin and Jetpack Compose.
+- **Stremio core integration** through the Kotlin/JNI core bridge for account, addon, catalog, library, meta, stream, and player state compatibility.
 - **Stremio account integration** for synced library, addons, profile settings, and continue watching.
 - **Addon discovery and detail pages** for browsing, installing, and managing Stremio addons.
 - **Stream selection and playback** for direct HTTP streams and local streaming-server URLs.
@@ -160,6 +177,9 @@ adb uninstall com.stremio.mobile
 GitHub Actions workflows are included:
 
 - `android-ci.yml` builds, verifies, and uploads debug APK artifacts for `arm64-v8a`, `x86_64`, and universal output.
+- `android-pr-checks.yml` validates the Gradle wrapper, compiles debug Kotlin, and runs JVM unit tests for pull requests.
+- `android-nightly.yml` builds and uploads scheduled/manual debug APK artifacts for quick smoke testing.
+- `android-lint-diagnostics.yml` runs Android Lint manually and uploads reports without blocking the branch while the existing lint backlog is cleaned up.
 - `release-apk.yml` builds signed split APKs, generates SHA256 checksums, uploads mapping output, and publishes all assets to GitHub Releases.
 
 Required release secrets:

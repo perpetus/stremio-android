@@ -1,0 +1,50 @@
+name: Android Nightly APK
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-nightly-apk
+  cancel-in-progress: true
+
+jobs:
+  debug-apk:
+    name: Build Debug APKs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
+
+      - name: Build debug APKs
+        run: ./gradlew :app:assembleDebug --warning-mode all
+
+      - name: Verify debug APK outputs
+        run: python .github/scripts/verify-apk-outputs.py app/build/outputs/apk/debug arm64-v8a x86_64 universal
+
+      - name: Upload debug APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: stremio-mobile-nightly-debug-apks
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
