@@ -57,6 +57,29 @@ jobs:
           restore-keys: |
             android-vcpkg-
 
+      - name: Create Android triplets
+        run: |
+          mkdir -p stream-server/triplets
+          cat > stream-server/triplets/arm64-android.cmake << 'EOF'
+          set(VCPKG_TARGET_ARCHITECTURE arm64)
+          set(VCPKG_CRT_LINKAGE dynamic)
+          set(VCPKG_LIBRARY_LINKAGE static)
+          set(VCPKG_CMAKE_SYSTEM_NAME Android)
+          set(VCPKG_CMAKE_SYSTEM_VERSION 24)
+          set(VCPKG_MAKE_BUILD_TRIPLET "--host=aarch64-linux-android")
+          set(VCPKG_CMAKE_CONFIGURE_OPTIONS -DANDROID_ABI=arm64-v8a)
+          EOF
+
+          cat > stream-server/triplets/x64-android.cmake << 'EOF'
+          set(VCPKG_TARGET_ARCHITECTURE x64)
+          set(VCPKG_CRT_LINKAGE dynamic)
+          set(VCPKG_LIBRARY_LINKAGE static)
+          set(VCPKG_CMAKE_SYSTEM_NAME Android)
+          set(VCPKG_CMAKE_SYSTEM_VERSION 24)
+          set(VCPKG_MAKE_BUILD_TRIPLET "--host=x86_64-linux-android")
+          set(VCPKG_CMAKE_CONFIGURE_OPTIONS -DANDROID_ABI=x86_64)
+          EOF
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -65,15 +88,27 @@ jobs:
           vcpkgJsonGlob: 'stream-server/vcpkg.json'
           runVcpkgInstall: false
 
-      - name: Install vcpkg for arm64-android
+      - name: Install vcpkg dependencies for arm64-android
+        working-directory: stream-server
         run: |
-          ./vcpkg/vcpkg install --triplet arm64-android --x-install-root=${{ github.workspace }}/vcpkg_installed --overlay-triplets=stream-server/triplets
+          ${{ github.workspace }}/vcpkg/vcpkg install \
+            --triplet arm64-android \
+            --x-install-root=${{ github.workspace }}/vcpkg_installed \
+            --overlay-triplets=triplets \
+            --overlay-ports=vcpkg-overlays \
+            libtorrent
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
-      - name: Install vcpkg for x64-android
+      - name: Install vcpkg dependencies for x64-android
+        working-directory: stream-server
         run: |
-          ./vcpkg/vcpkg install --triplet x64-android --x-install-root=${{ github.workspace }}/vcpkg_installed --overlay-triplets=stream-server/triplets
+          ${{ github.workspace }}/vcpkg/vcpkg install \
+            --triplet x64-android \
+            --x-install-root=${{ github.workspace }}/vcpkg_installed \
+            --overlay-triplets=triplets \
+            --overlay-ports=vcpkg-overlays \
+            libtorrent
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
