@@ -52,10 +52,12 @@ jobs:
       - name: Cache vcpkg installed packages
         uses: actions/cache@v4
         with:
-          path: vcpkg_installed
-          key: android-vcpkg-${{ hashFiles('stream-server/vcpkg.json') }}
+          path: |
+            vcpkg_installed-arm64
+            vcpkg_installed-x64
+          key: android-vcpkg-split-${{ hashFiles('stream-server/vcpkg.json') }}
           restore-keys: |
-            android-vcpkg-
+            android-vcpkg-split-
 
       - name: Create Android triplets
         run: |
@@ -93,7 +95,7 @@ jobs:
         run: |
           ${{ github.workspace }}/vcpkg/vcpkg install \
             --triplet arm64-android \
-            --x-install-root=${{ github.workspace }}/vcpkg_installed \
+            --x-install-root=${{ github.workspace }}/vcpkg_installed-arm64 \
             --overlay-triplets=triplets \
             --overlay-ports=vcpkg-overlays
         env:
@@ -104,11 +106,18 @@ jobs:
         run: |
           ${{ github.workspace }}/vcpkg/vcpkg install \
             --triplet x64-android \
-            --x-install-root=${{ github.workspace }}/vcpkg_installed \
+            --x-install-root=${{ github.workspace }}/vcpkg_installed-x64 \
             --overlay-triplets=triplets \
             --overlay-ports=vcpkg-overlays
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: Verify vcpkg OpenSSL prefixes
+        run: |
+          test -d "${{ github.workspace }}/vcpkg_installed-arm64/arm64-android/include/openssl"
+          test -d "${{ github.workspace }}/vcpkg_installed-arm64/arm64-android/lib"
+          test -d "${{ github.workspace }}/vcpkg_installed-x64/x64-android/include/openssl"
+          test -d "${{ github.workspace }}/vcpkg_installed-x64/x64-android/lib"
 
       - name: Build arm64-v8a
         working-directory: stream-server/server
@@ -116,11 +125,11 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-          VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
+          VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed-arm64
           VCPKGRS_TRIPLET: arm64-android
-          PKG_CONFIG_PATH: ${{ github.workspace }}/vcpkg_installed/arm64-android/lib/pkgconfig
-          PKG_CONFIG_SYSROOT_DIR: ${{ github.workspace }}/vcpkg_installed/arm64-android
-          OPENSSL_DIR: ${{ github.workspace }}/vcpkg_installed/arm64-android
+          PKG_CONFIG_PATH: ${{ github.workspace }}/vcpkg_installed-arm64/arm64-android/lib/pkgconfig
+          PKG_CONFIG_SYSROOT_DIR: ${{ github.workspace }}/vcpkg_installed-arm64/arm64-android
+          OPENSSL_DIR: ${{ github.workspace }}/vcpkg_installed-arm64/arm64-android
 
       - name: Build x86_64
         working-directory: stream-server/server
@@ -128,11 +137,11 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-          VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
+          VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed-x64
           VCPKGRS_TRIPLET: x64-android
-          PKG_CONFIG_PATH: ${{ github.workspace }}/vcpkg_installed/x64-android/lib/pkgconfig
-          PKG_CONFIG_SYSROOT_DIR: ${{ github.workspace }}/vcpkg_installed/x64-android
-          OPENSSL_DIR: ${{ github.workspace }}/vcpkg_installed/x64-android
+          PKG_CONFIG_PATH: ${{ github.workspace }}/vcpkg_installed-x64/x64-android/lib/pkgconfig
+          PKG_CONFIG_SYSROOT_DIR: ${{ github.workspace }}/vcpkg_installed-x64/x64-android
+          OPENSSL_DIR: ${{ github.workspace }}/vcpkg_installed-x64/x64-android
 
       - name: Prepare JNI libs
         run: |
