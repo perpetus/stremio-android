@@ -95,8 +95,7 @@ jobs:
             --triplet arm64-android \
             --x-install-root=${{ github.workspace }}/vcpkg_installed \
             --overlay-triplets=triplets \
-            --overlay-ports=vcpkg-overlays \
-            libtorrent
+            --overlay-ports=vcpkg-overlays
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
@@ -107,8 +106,7 @@ jobs:
             --triplet x64-android \
             --x-install-root=${{ github.workspace }}/vcpkg_installed \
             --overlay-triplets=triplets \
-            --overlay-ports=vcpkg-overlays \
-            libtorrent
+            --overlay-ports=vcpkg-overlays
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
