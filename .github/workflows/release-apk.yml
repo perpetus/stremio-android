@@ -15,8 +15,36 @@ permissions:
 
 jobs:
   build-stream-server:
-    name: Build Stream Server Native Libraries
+    name: Build Stream Server ${{ matrix.abi }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: armeabi-v7a
+            rust-target: armv7-linux-androideabi
+            vcpkg-triplet: arm-android
+            vcpkg-arch: arm
+            android-abi: armeabi-v7a
+            make-host: armv7a-linux-androideabi
+          - abi: arm64-v8a
+            rust-target: aarch64-linux-android
+            vcpkg-triplet: arm64-android
+            vcpkg-arch: arm64
+            android-abi: arm64-v8a
+            make-host: aarch64-linux-android
+          - abi: x86
+            rust-target: i686-linux-android
+            vcpkg-triplet: x86-android
+            vcpkg-arch: x86
+            android-abi: x86
+            make-host: i686-linux-android
+          - abi: x86_64
+            rust-target: x86_64-linux-android
+            vcpkg-triplet: x64-android
+            vcpkg-arch: x64
+            android-abi: x86_64
+            make-host: x86_64-linux-android
 
     env:
       VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
@@ -31,7 +59,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,x86_64-linux-android
+          targets: ${{ matrix.rust-target }}
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
@@ -52,35 +80,28 @@ jobs:
       - name: Cache vcpkg installed packages
         uses: actions/cache@v4
         with:
-          path: |
-            vcpkg_installed-arm64
-            vcpkg_installed-x64
-          key: android-vcpkg-split-${{ hashFiles('stream-server/vcpkg.json') }}
+          path: vcpkg_installed-${{ matrix.abi }}
+          key: android-vcpkg-${{ matrix.vcpkg-triplet }}-${{ hashFiles('stream-server/vcpkg.json') }}
           restore-keys: |
-            android-vcpkg-split-
+            android-vcpkg-${{ matrix.vcpkg-triplet }}-
 
       - name: Create Android triplets
         run: |
           mkdir -p stream-server/triplets
-          cat > stream-server/triplets/arm64-android.cmake << 'EOF'
-          set(VCPKG_TARGET_ARCHITECTURE arm64)
+          cat > stream-server/triplets/${{ matrix.vcpkg-triplet }}.cmake << 'EOF'
+          set(VCPKG_TARGET_ARCHITECTURE ${{ matrix.vcpkg-arch }})
           set(VCPKG_CRT_LINKAGE dynamic)
           set(VCPKG_LIBRARY_LINKAGE static)
           set(VCPKG_CMAKE_SYSTEM_NAME Android)
           set(VCPKG_CMAKE_SYSTEM_VERSION 24)
-          set(VCPKG_MAKE_BUILD_TRIPLET "--host=aarch64-linux-android")
-          set(VCPKG_CMAKE_CONFIGURE_OPTIONS -DANDROID_ABI=arm64-v8a)
+          set(VCPKG_MAKE_BUILD_TRIPLET "--host=${{ matrix.make-host }}")
           EOF
 
-          cat > stream-server/triplets/x64-android.cmake << 'EOF'
-          set(VCPKG_TARGET_ARCHITECTURE x64)
-          set(VCPKG_CRT_LINKAGE dynamic)
-          set(VCPKG_LIBRARY_LINKAGE static)
-          set(VCPKG_CMAKE_SYSTEM_NAME Android)
-          set(VCPKG_CMAKE_SYSTEM_VERSION 24)
-          set(VCPKG_MAKE_BUILD_TRIPLET "--host=x86_64-linux-android")
-          set(VCPKG_CMAKE_CONFIGURE_OPTIONS -DANDROID_ABI=x86_64)
-          EOF
+          if [[ "${{ matrix.android-abi }}" == "armeabi-v7a" ]]; then
+            echo 'set(VCPKG_CMAKE_CONFIGURE_OPTIONS -DANDROID_ABI=armeabi-v7a -DANDROID_ARM_NEON=ON)' >> stream-server/triplets/${{ matrix.vcpkg-triplet }}.cmake
+          else
+            echo 'set(VCPKG_CMAKE_CONFIGURE_OPTIONS -DANDROID_ABI=${{ matrix.android-abi }})' >> stream-server/triplets/${{ matrix.vcpkg-triplet }}.cmake
+          fi
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -90,23 +111,12 @@ jobs:
           vcpkgJsonGlob: 'stream-server/vcpkg.json'
           runVcpkgInstall: false
 
-      - name: Install vcpkg dependencies for arm64-android
+      - name: Install vcpkg dependencies
         working-directory: stream-server
         run: |
           ${{ github.workspace }}/vcpkg/vcpkg install \
-            --triplet arm64-android \
-            --x-install-root=${{ github.workspace }}/vcpkg_installed-arm64 \
-            --overlay-triplets=triplets \
-            --overlay-ports=vcpkg-overlays
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-
-      - name: Install vcpkg dependencies for x64-android
-        working-directory: stream-server
-        run: |
-          ${{ github.workspace }}/vcpkg/vcpkg install \
-            --triplet x64-android \
-            --x-install-root=${{ github.workspace }}/vcpkg_installed-x64 \
+            --triplet ${{ matrix.vcpkg-triplet }} \
+            --x-install-root=${{ github.workspace }}/vcpkg_installed-${{ matrix.abi }} \
             --overlay-triplets=triplets \
             --overlay-ports=vcpkg-overlays
         env:
@@ -114,45 +124,31 @@ jobs:
 
       - name: Verify vcpkg OpenSSL prefixes
         run: |
-          test -d "${{ github.workspace }}/vcpkg_installed-arm64/arm64-android/include/openssl"
-          test -d "${{ github.workspace }}/vcpkg_installed-arm64/arm64-android/lib"
-          test -d "${{ github.workspace }}/vcpkg_installed-x64/x64-android/include/openssl"
-          test -d "${{ github.workspace }}/vcpkg_installed-x64/x64-android/lib"
+          test -d "${{ github.workspace }}/vcpkg_installed-${{ matrix.abi }}/${{ matrix.vcpkg-triplet }}/include/openssl"
+          test -d "${{ github.workspace }}/vcpkg_installed-${{ matrix.abi }}/${{ matrix.vcpkg-triplet }}/lib"
 
-      - name: Build arm64-v8a
+      - name: Build ${{ matrix.abi }}
         working-directory: stream-server/server
-        run: cargo ndk --target aarch64-linux-android --platform 24 build --release --features libtorrent --no-default-features
+        run: cargo ndk --target ${{ matrix.rust-target }} --platform 24 build --release --features libtorrent --no-default-features
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-          VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed-arm64
-          VCPKGRS_TRIPLET: arm64-android
-          PKG_CONFIG_PATH: ${{ github.workspace }}/vcpkg_installed-arm64/arm64-android/lib/pkgconfig
-          PKG_CONFIG_SYSROOT_DIR: ${{ github.workspace }}/vcpkg_installed-arm64/arm64-android
-          OPENSSL_DIR: ${{ github.workspace }}/vcpkg_installed-arm64/arm64-android
-
-      - name: Build x86_64
-        working-directory: stream-server/server
-        run: cargo ndk --target x86_64-linux-android --platform 24 build --release --features libtorrent --no-default-features
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-          VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed-x64
-          VCPKGRS_TRIPLET: x64-android
-          PKG_CONFIG_PATH: ${{ github.workspace }}/vcpkg_installed-x64/x64-android/lib/pkgconfig
-          PKG_CONFIG_SYSROOT_DIR: ${{ github.workspace }}/vcpkg_installed-x64/x64-android
-          OPENSSL_DIR: ${{ github.workspace }}/vcpkg_installed-x64/x64-android
+          VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed-${{ matrix.abi }}
+          VCPKGRS_TRIPLET: ${{ matrix.vcpkg-triplet }}
+          PKG_CONFIG_ALLOW_CROSS: "1"
+          PKG_CONFIG_PATH: ${{ github.workspace }}/vcpkg_installed-${{ matrix.abi }}/${{ matrix.vcpkg-triplet }}/lib/pkgconfig
+          PKG_CONFIG_SYSROOT_DIR: ${{ github.workspace }}/vcpkg_installed-${{ matrix.abi }}/${{ matrix.vcpkg-triplet }}
+          OPENSSL_DIR: ${{ github.workspace }}/vcpkg_installed-${{ matrix.abi }}/${{ matrix.vcpkg-triplet }}
 
       - name: Prepare JNI libs
         run: |
-          mkdir -p jniLibs/arm64-v8a jniLibs/x86_64
-          cp stream-server/target/aarch64-linux-android/release/libstream_server.so jniLibs/arm64-v8a/
-          cp stream-server/target/x86_64-linux-android/release/libstream_server.so jniLibs/x86_64/
+          mkdir -p jniLibs/${{ matrix.abi }}
+          cp stream-server/target/${{ matrix.rust-target }}/release/libstream_server.so jniLibs/${{ matrix.abi }}/
 
       - name: Upload JNI libs
         uses: actions/upload-artifact@v4
         with:
-          name: stream-server-jniLibs
+          name: stream-server-jniLibs-${{ matrix.abi }}
           path: jniLibs/
 
   release:
@@ -175,14 +171,17 @@ jobs:
       - name: Download stream-server JNI libs
         uses: actions/download-artifact@v4
         with:
-          name: stream-server-jniLibs
+          pattern: stream-server-jniLibs-*
           path: app/src/main/jniLibs/
+          merge-multiple: true
 
       - name: Verify JNI libs
         run: |
           ls -la app/src/main/jniLibs/
-          ls -la app/src/main/jniLibs/arm64-v8a/
-          ls -la app/src/main/jniLibs/x86_64/
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            test -f "app/src/main/jniLibs/${abi}/libstream_server.so"
+            ls -la "app/src/main/jniLibs/${abi}/"
+          done
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -261,7 +260,9 @@ jobs:
       - name: Verify release assets
         shell: bash
         run: |
+          test -f "dist/StremioMobile-v${VERSION_NAME}-armeabi-v7a-release.apk"
           test -f "dist/StremioMobile-v${VERSION_NAME}-arm64-v8a-release.apk"
+          test -f "dist/StremioMobile-v${VERSION_NAME}-x86-release.apk"
           test -f "dist/StremioMobile-v${VERSION_NAME}-x86_64-release.apk"
           test -f "dist/StremioMobile-v${VERSION_NAME}-universal-release.apk"
           test -f "dist/StremioMobile-v${VERSION_NAME}-SHA256SUMS.txt"

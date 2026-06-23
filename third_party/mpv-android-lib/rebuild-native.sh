@@ -22,19 +22,20 @@ fi
 
 pushd "${UPSTREAM_DIR}/buildscripts" >/dev/null
 ./download.sh
+./buildall.sh --arch armv7l mpv-android
 ./buildall.sh --arch arm64 mpv-android
+./buildall.sh --arch x86 mpv-android
 ./buildall.sh --arch x86_64 mpv-android
 popd >/dev/null
 
-for abi in arm64-v8a x86_64; do
+for abi in armeabi-v7a arm64-v8a x86 x86_64; do
   rm -rf "${ROOT}/app/src/main/jniLibs/${abi}"
   mkdir -p "${ROOT}/app/src/main/jniLibs/${abi}"
 done
 
-find "${UPSTREAM_DIR}/app/src/main/jniLibs/arm64-v8a" -name '*.so' ! -name 'libc++_shared.so' \
-  -exec cp {} "${ROOT}/app/src/main/jniLibs/arm64-v8a/" \;
-find "${UPSTREAM_DIR}/app/src/main/jniLibs/x86_64" -name '*.so' ! -name 'libc++_shared.so' \
-  -exec cp {} "${ROOT}/app/src/main/jniLibs/x86_64/" \;
+for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+  find "${UPSTREAM_DIR}/app/src/main/jniLibs/${abi}" -name '*.so' ! -name 'libc++_shared.so' \
+    -exec cp {} "${ROOT}/app/src/main/jniLibs/${abi}/" \;
+done
 
 echo "Updated vendored mpv native libraries."
-

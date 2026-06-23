@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 
-REQUIRED_ABIS = {"arm64-v8a", "x86_64", "universal"}
+REQUIRED_ABIS = {"armeabi-v7a", "arm64-v8a", "x86", "x86_64", "universal"}
 
 
 def detect_abi(element):

@@ -52,7 +52,7 @@ The official app is the official support channel. This app is the open-source, n
 - **Addon discovery and detail pages** for browsing, installing, and managing Stremio addons.
 - **Stream selection and playback** for direct HTTP streams and local streaming-server URLs.
 - **Dual internal player backends** with ExoPlayer as default and MPV as an optional internal player.
-- **Vendored MPV Android library** under `third_party/mpv-android-lib` with supported `arm64-v8a` and `x86_64` native outputs.
+- **Vendored MPV Android library** under `third_party/mpv-android-lib` with supported `armeabi-v7a`, `arm64-v8a`, `x86`, and `x86_64` native outputs.
 - **Web-parity audio and subtitle controls** including language defaults, subtitle variants, local subtitle import, styling, delay, size, and position controls.
 - **Continue watching resume flow** with remembered stream selection for streams previously played on the device.
 - **Modern Liquid Glass interface** with global classic/modern UI style, configurable glass performance mode, adaptive contrast, haptics, sliders, toggles, and a Liquid Glass Lab.
@@ -142,7 +142,9 @@ Release builds produce ABI-specific APKs plus one universal APK:
 
 | APK | Device Target |
 |---|---|
+| `StremioMobile-vX.Y.Z-armeabi-v7a-release.apk` | Older 32-bit ARM Android devices |
 | `StremioMobile-vX.Y.Z-arm64-v8a-release.apk` | Modern Android phones/tablets |
+| `StremioMobile-vX.Y.Z-x86-release.apk` | 32-bit x86 emulator |
 | `StremioMobile-vX.Y.Z-x86_64-release.apk` | x86_64 emulator |
 | `StremioMobile-vX.Y.Z-universal-release.apk` | Fallback APK containing all supported ABIs |
 
@@ -176,7 +178,7 @@ adb uninstall com.stremio.mobile
 
 GitHub Actions workflows are included:
 
-- `android-ci.yml` builds, verifies, and uploads debug APK artifacts for `arm64-v8a`, `x86_64`, and universal output.
+- `android-ci.yml` builds, verifies, and uploads debug APK artifacts for `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64`, and universal output.
 - `android-pr-checks.yml` validates the Gradle wrapper, compiles debug Kotlin, and runs JVM unit tests for pull requests.
 - `android-nightly.yml` builds and uploads scheduled/manual debug APK artifacts for quick smoke testing.
 - `android-lint-diagnostics.yml` runs Android Lint manually and uploads reports without blocking the branch while the existing lint backlog is cleaned up.
@@ -199,10 +201,12 @@ To create the base64 keystore secret from PowerShell:
 
 Prebuilt native outputs are committed for supported ABIs:
 
+- `armeabi-v7a`
 - `arm64-v8a`
+- `x86`
 - `x86_64`
 
-32-bit `armeabi-v7a` and `x86` APKs are not shipped. Adding them requires rebuilding and vendoring MPV native libraries, stream-server JNI output, stremio-core JNI output, and compatible C++ runtime packaging.
+The universal APK contains all supported ABIs. ABI-specific APKs are smaller and should be preferred when the device architecture is known.
 
 The MPV module intentionally excludes `libc++_shared.so` and uses the app-packaged C++ runtime.
 
@@ -218,15 +222,7 @@ MPV native rebuilds are handled separately through:
 third_party/mpv-android-lib/rebuild-native.sh
 ```
 
-The MPV rebuild script is intended for Linux/macOS environments.
-
-Future 32-bit ABI work would require:
-
-1. Build MPV for `armeabi-v7a` and `x86`.
-2. Build stream-server for `armv7-linux-androideabi` and `i686-linux-android`.
-3. Build stremio-core JNI for `armv7-linux-androideabi` and `i686-linux-android`.
-4. Add `armeabi-v7a` and `x86` to the app supported ABI list.
-5. Smoke test MPV, ExoPlayer, subtitles, and local streaming on matching devices/emulators.
+The MPV rebuild script is intended for Linux/macOS environments. stream-server native builds can be run per ABI through the Gradle `copyStreamServerJniLibs` helper; Gradle can run those native ABI tasks in parallel when invoked with `--parallel`.
 
 ## Development Notes
 
@@ -234,7 +230,7 @@ Future 32-bit ABI work would require:
 - ExoPlayer remains the default player backend.
 - MPV support is vendored source plus native outputs, not a Maven runtime dependency.
 - The app targets Android package `com.stremio.mobile`.
-- Supported native ABIs are currently `arm64-v8a` and `x86_64`.
+- Supported native ABIs are currently `armeabi-v7a`, `arm64-v8a`, `x86`, and `x86_64`.
 - The project is optimized for phone UI. TV/D-pad behavior is not the primary target.
 
 ## Useful Commands
@@ -249,8 +245,8 @@ Future 32-bit ABI work would require:
 # Release APK
 .\gradlew :mpv-android-lib:assembleRelease :app:assembleRelease
 
-# Verify release APK metadata contains arm64-v8a, x86_64, and universal outputs
-python .github/scripts/verify-apk-outputs.py app/build/outputs/apk/release arm64-v8a x86_64 universal
+# Verify release APK metadata contains all ABI split outputs plus universal
+python .github/scripts/verify-apk-outputs.py app/build/outputs/apk/release armeabi-v7a arm64-v8a x86 x86_64 universal
 
 # Unit tests
 .\gradlew testDebugUnitTest
