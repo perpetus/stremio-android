@@ -233,6 +233,9 @@ jobs:
           echo "ANDROID_KEYSTORE_FILE=${keystore_file}" >> "${GITHUB_ENV}"
 
       - name: Build release APK
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
         run: >
           ./gradlew
           :mpv-android-lib:assembleRelease
