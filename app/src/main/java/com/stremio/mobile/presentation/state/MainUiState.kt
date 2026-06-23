@@ -1,5 +1,6 @@
 package com.stremio.mobile.presentation.state
 
+import com.stremio.mobile.core.theme.AppFont
 import com.stremio.mobile.data.model.CatalogShelf
 import com.stremio.mobile.data.model.LiquidGlassTuning
 import com.stremio.mobile.data.model.LIQUID_GLASS_RECOMMENDED_GLOBAL_ALPHA
@@ -8,6 +9,8 @@ import com.stremio.mobile.server.StreamingServerState
 
 data class MainUiState(
     val server: StreamingServerState = StreamingServerState.Stopped,
+    val selectedFont: AppFont = AppFont.PLUS_JAKARTA_SANS,
+
     val serverPingStatus: String = "Not checked",
     val isPingLoading: Boolean = false,
     val serverVersion: String = "0.1.5",
@@ -47,7 +50,10 @@ data class MainUiState(
     val isAutoStartOnBoot: Boolean = false,
     val isServerInForeground: Boolean = true,
     val isMobileDataWarning: Boolean = true,
+    val showMobileDataWarning: Boolean = false,
     val isKeepScreenOn: Boolean = true,
+    val isAnalyticsEnabled: Boolean = true,
+    val showAnalyticsDisclosure: Boolean = false,
     val isSeedingEnabled: Boolean = true,
     val isSearchOpen: Boolean = false,
     val globalGlassAlpha: Float = LIQUID_GLASS_RECOMMENDED_GLOBAL_ALPHA,

@@ -3,7 +3,7 @@ package com.stremio.mobile.server
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import timber.log.Timber
 import com.stremio.mobile.MainApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,13 +16,13 @@ class BootReceiver : BroadcastReceiver() {
             val prefs = app.getSharedPreferences("stremio_account", Context.MODE_PRIVATE)
             val autoStart = prefs.getBoolean("auto_start_on_boot", false)
             if (autoStart) {
-                Log.d("BootReceiver", "Auto-start on boot is enabled, starting server...")
+                Timber.d("Auto-start on boot is enabled, starting server...")
                 val pendingResult = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         app.container.serverController.start()
                     } catch (e: Exception) {
-                        Log.e("BootReceiver", "Failed to auto-start server on boot", e)
+                        Timber.e(e, "Failed to auto-start server on boot")
                     } finally {
                         pendingResult.finish()
                     }

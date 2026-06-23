@@ -21,6 +21,8 @@ fun AndroidSettingsScreen(
     onSetMobileDataWarning: (Boolean) -> Unit,
     isKeepScreenOn: Boolean,
     onSetKeepScreenOn: (Boolean) -> Unit,
+    isAnalyticsEnabled: Boolean,
+    onSetAnalyticsEnabled: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     Column(
@@ -71,6 +73,21 @@ fun AndroidSettingsScreen(
             checked = isMobileDataWarning,
             onCheckedChange = onSetMobileDataWarning,
             description = "Warn before streaming movies or TV shows over cellular connections"
+        )
+
+        Text(
+            text = "PRIVACY & DIAGNOSTICS",
+            color = MutedText,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+        )
+
+        SettingsToggleRow(
+            title = "Share Diagnostics & Analytics",
+            checked = isAnalyticsEnabled,
+            onCheckedChange = onSetAnalyticsEnabled,
+            description = "Help improve the app by sharing anonymous crash reports and usage statistics"
         )
     }
 }

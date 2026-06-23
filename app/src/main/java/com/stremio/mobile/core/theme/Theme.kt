@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.font.Font
@@ -27,52 +28,56 @@ private val StremioDarkScheme: ColorScheme = darkColorScheme(
     onSurfaceVariant = Color(0xFFB8BEC9),
 )
 
-/**
- * stremio-web's typeface, ported from the same variable-weight TTF the web client bundles
- * (ref/stremio-web/assets/fonts/PlusJakartaSans.ttf). One physical font file, instantiated at
- * each weight the app actually uses via the variable font's weight axis (no-op below API 26,
- * where the font just renders at its default static weight).
- */
 @OptIn(ExperimentalTextApi::class)
-private fun jakartaWeight(weight: Int) = Font(
-    resId = R.font.plus_jakarta_sans,
-    weight = FontWeight(weight),
-    variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
+private fun createVariableFontFamily(resId: Int) = FontFamily(
+    Font(resId = resId, weight = FontWeight(400), variationSettings = FontVariation.Settings(FontVariation.weight(400))),
+    Font(resId = resId, weight = FontWeight(500), variationSettings = FontVariation.Settings(FontVariation.weight(500))),
+    Font(resId = resId, weight = FontWeight(600), variationSettings = FontVariation.Settings(FontVariation.weight(600))),
+    Font(resId = resId, weight = FontWeight(700), variationSettings = FontVariation.Settings(FontVariation.weight(700))),
+    Font(resId = resId, weight = FontWeight(800), variationSettings = FontVariation.Settings(FontVariation.weight(800))),
 )
 
-val PlusJakartaSans = FontFamily(
-    jakartaWeight(400),
-    jakartaWeight(500),
-    jakartaWeight(600),
-    jakartaWeight(700),
-    jakartaWeight(800),
-)
+enum class AppFont(val displayName: String, val resId: Int) {
+    PLUS_JAKARTA_SANS("Plus Jakarta Sans", R.font.plus_jakarta_sans),
+    INTER("Inter", R.font.inter),
+    GEIST("Geist", R.font.geist),
+    DM_SANS("DM Sans", R.font.dm_sans),
+    FIGTREE("Figtree", R.font.figtree),
+    ROBOTO_FLEX("Roboto Flex", R.font.roboto_flex);
 
-private val StremioTypography = Typography().let { base ->
-    base.copy(
-        displayLarge = base.displayLarge.copy(fontFamily = PlusJakartaSans),
-        displayMedium = base.displayMedium.copy(fontFamily = PlusJakartaSans),
-        displaySmall = base.displaySmall.copy(fontFamily = PlusJakartaSans),
-        headlineLarge = base.headlineLarge.copy(fontFamily = PlusJakartaSans),
-        headlineMedium = base.headlineMedium.copy(fontFamily = PlusJakartaSans),
-        headlineSmall = base.headlineSmall.copy(fontFamily = PlusJakartaSans),
-        titleLarge = base.titleLarge.copy(fontFamily = PlusJakartaSans),
-        titleMedium = base.titleMedium.copy(fontFamily = PlusJakartaSans),
-        titleSmall = base.titleSmall.copy(fontFamily = PlusJakartaSans),
-        bodyLarge = base.bodyLarge.copy(fontFamily = PlusJakartaSans),
-        bodyMedium = base.bodyMedium.copy(fontFamily = PlusJakartaSans),
-        bodySmall = base.bodySmall.copy(fontFamily = PlusJakartaSans),
-        labelLarge = base.labelLarge.copy(fontFamily = PlusJakartaSans),
-        labelMedium = base.labelMedium.copy(fontFamily = PlusJakartaSans),
-        labelSmall = base.labelSmall.copy(fontFamily = PlusJakartaSans),
+    val fontFamily: FontFamily by lazy {
+        createVariableFontFamily(resId)
+    }
+}
+
+fun getTypography(fontFamily: FontFamily): Typography {
+    val base = Typography()
+    return base.copy(
+        displayLarge = base.displayLarge.copy(fontFamily = fontFamily),
+        displayMedium = base.displayMedium.copy(fontFamily = fontFamily),
+        displaySmall = base.displaySmall.copy(fontFamily = fontFamily),
+        headlineLarge = base.headlineLarge.copy(fontFamily = fontFamily),
+        headlineMedium = base.headlineMedium.copy(fontFamily = fontFamily),
+        headlineSmall = base.headlineSmall.copy(fontFamily = fontFamily),
+        titleLarge = base.titleLarge.copy(fontFamily = fontFamily),
+        titleMedium = base.titleMedium.copy(fontFamily = fontFamily),
+        titleSmall = base.titleSmall.copy(fontFamily = fontFamily),
+        bodyLarge = base.bodyLarge.copy(fontFamily = fontFamily),
+        bodyMedium = base.bodyMedium.copy(fontFamily = fontFamily),
+        bodySmall = base.bodySmall.copy(fontFamily = fontFamily),
+        labelLarge = base.labelLarge.copy(fontFamily = fontFamily),
+        labelMedium = base.labelMedium.copy(fontFamily = fontFamily),
+        labelSmall = base.labelSmall.copy(fontFamily = fontFamily),
     )
 }
 
 @Composable
-fun StremioMobileTheme(content: @Composable () -> Unit) {
+fun StremioMobileTheme(appFont: AppFont = AppFont.PLUS_JAKARTA_SANS, content: @Composable () -> Unit) {
+    val typography = remember(appFont) { getTypography(appFont.fontFamily) }
     MaterialTheme(
         colorScheme = StremioDarkScheme,
-        typography = StremioTypography,
+        typography = typography,
         content = content,
     )
 }
+

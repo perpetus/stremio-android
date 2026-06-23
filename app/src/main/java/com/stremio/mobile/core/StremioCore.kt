@@ -1,7 +1,7 @@
 package com.stremio.mobile.core
 
 import android.content.Context
-import android.util.Log
+import timber.log.Timber
 import com.stremio.core.Core
 import com.stremio.core.Field
 import com.stremio.core.models.Ctx
@@ -77,11 +77,11 @@ class StremioCore(context: Context) {
         if (initialized) return
         Core.addEventListener(listener)
         val error = runCatching { Core.initialize(storage) }.getOrElse { e ->
-            Log.e(tag, "Core.initialize threw", e)
+            Timber.tag(tag).e(e, "Core.initialize threw")
             null
         }
         if (error != null) {
-            Log.e(tag, "Core.initialize failed: code=${error.code} message=${error.message}")
+            Timber.tag(tag).e("Core.initialize failed: code=%d message=%s", error.code, error.message)
         }
         initialized = true
     }
@@ -559,7 +559,7 @@ class StremioCore(context: Context) {
 
     private fun dispatch(action: Action, field: Field) {
         runCatching { Core.dispatch(action, field) }
-            .onFailure { Log.e(tag, "dispatch failed for $field", it) }
+            .onFailure { Timber.tag(tag).e(it, "dispatch failed for %s", field) }
     }
 
     private fun newStateFlow(field: Field): Flow<Unit> = callbackFlow {

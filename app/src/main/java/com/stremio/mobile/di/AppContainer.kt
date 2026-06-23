@@ -1,7 +1,7 @@
 package com.stremio.mobile.di
 
 import android.content.Context
-import android.util.Log
+import timber.log.Timber
 import com.stremio.mobile.core.StremioCore
 import com.stremio.mobile.player.PlaybackManager
 import com.stremio.mobile.server.StubStreamingServerController
@@ -20,7 +20,7 @@ class AppContainer(context: Context) {
         try {
             initialize()
         } catch (e: Throwable) {
-            Log.e("AppContainer", "Failed to initialize stremio-core", e)
+            Timber.e(e, "Failed to initialize stremio-core")
         }
     }
 
@@ -33,7 +33,7 @@ class AppContainer(context: Context) {
     val serverController: StreamingServerController = try {
         JniStreamingServerController(context, useForegroundService = { authRepository.isServerInForeground() })
     } catch (e: UnsatisfiedLinkError) {
-        Log.e("AppContainer", "Failed to load stream_server JNI, falling back to Stub", e)
+        Timber.e(e, "Failed to load stream_server JNI, falling back to Stub")
         StubStreamingServerController()
     }
 

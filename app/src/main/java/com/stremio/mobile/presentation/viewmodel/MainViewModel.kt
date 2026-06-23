@@ -19,9 +19,12 @@ import com.stremio.mobile.player.LanguageCatalog
 import com.stremio.mobile.player.PlayerEngine
 import com.stremio.mobile.player.PlayerSubtitleStyle
 import com.stremio.mobile.player.PlayerTrackOption
+import com.stremio.mobile.core.theme.AppFont
+import timber.log.Timber
 import com.stremio.mobile.presentation.state.*
 import com.stremio.mobile.server.StreamingServerController
 import com.stremio.mobile.server.StreamingServerState
+
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -91,6 +94,8 @@ class MainViewModel(
     private val isServerInForeground = MutableStateFlow(authRepository.isServerInForeground())
     private val isMobileDataWarning = MutableStateFlow(authRepository.isMobileDataWarning())
     private val isKeepScreenOn = MutableStateFlow(authRepository.isKeepScreenOn())
+    private val isAnalyticsEnabled = MutableStateFlow(authRepository.isAnalyticsEnabled())
+    private val showAnalyticsDisclosure = MutableStateFlow(!authRepository.isAnalyticsDisclosureAcknowledged())
     private val isTraktAuthenticated = MutableStateFlow(false)
     private val isSeedingEnabled = MutableStateFlow(true)
     private val minSeedsThreshold = MutableStateFlow(authRepository.getMinSeedsThreshold())
@@ -104,6 +109,8 @@ class MainViewModel(
     private val glassHapticsEnabled = MutableStateFlow(authRepository.getGlassHapticsEnabled())
     private val hapticsIntensity = MutableStateFlow(authRepository.getHapticsIntensity())
     private val liquidGlassTuning = MutableStateFlow(authRepository.getLiquidGlassTuning())
+    private val selectedFont = MutableStateFlow(authRepository.getSelectedFont())
+    private val pendingMobileDataStream = MutableStateFlow<StreamOption?>(null)
 
     private var lastServerActivityMs: Long = System.currentTimeMillis()
     private val IDLE_TIMEOUT_MS = 5 * 60 * 1000L // 5 minutes
@@ -190,11 +197,19 @@ class MainViewModel(
             adaptiveGlassContrast,
             glassHapticsEnabled,
             hapticsIntensity,
-            liquidGlassTuning
+            liquidGlassTuning,
+            selectedFont,
+            pendingMobileDataStream,
+            isAnalyticsEnabled,
+            showAnalyticsDisclosure
         )
     ) { values ->
         MainUiState(
             server = values[0] as StreamingServerState,
+            selectedFont = values[45] as AppFont,
+            showMobileDataWarning = values[46] != null,
+            isAnalyticsEnabled = values[47] as Boolean,
+            showAnalyticsDisclosure = values[48] as Boolean,
             serverPingStatus = values[1] as String,
             isPingLoading = values[2] as Boolean,
             serverVersion = "0.1.5",
@@ -361,7 +376,7 @@ class MainViewModel(
                             null
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("MainViewModel", "Failed to fetch settings directly from server", e)
+                        Timber.e(e, "Failed to fetch settings directly from server")
                         null
                     }
                 }
@@ -437,12 +452,12 @@ class MainViewModel(
 
                         val responseCode = connection.responseCode
                         if (responseCode == 200) {
-                            android.util.Log.d("MainViewModel", "Successfully updated settings directly on server")
+                            Timber.d("Successfully updated settings directly on server")
                         } else {
-                            android.util.Log.e("MainViewModel", "Failed to update settings directly on server: response code $responseCode")
+                            Timber.e("Failed to update settings directly on server: response code %d", responseCode)
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("MainViewModel", "Error posting settings to server", e)
+                        Timber.e(e, "Error posting settings to server")
                     }
                 }
             }
@@ -477,10 +492,37 @@ class MainViewModel(
         isMobileDataWarning.value = enabled
     }
 
+    fun getSelectedFont(): AppFont = authRepository.getSelectedFont()
+    fun setSelectedFont(font: AppFont) {
+        authRepository.setSelectedFont(font)
+        selectedFont.value = font
+    }
+
     fun isKeepScreenOn(): Boolean = authRepository.isKeepScreenOn()
     fun setKeepScreenOn(enabled: Boolean) {
         authRepository.setKeepScreenOn(enabled)
         isKeepScreenOn.value = enabled
+    }
+
+    fun isAnalyticsEnabled(): Boolean = authRepository.isAnalyticsEnabled()
+    fun setAnalyticsEnabled(enabled: Boolean) {
+        authRepository.setAnalyticsEnabled(enabled)
+        isAnalyticsEnabled.value = enabled
+        
+        if (enabled) {
+            com.posthog.PostHog.optIn()
+        } else {
+            com.posthog.PostHog.optOut()
+        }
+        
+        com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance()
+            .setCrashlyticsCollectionEnabled(enabled)
+    }
+
+    fun acknowledgeAnalyticsDisclosure(enableAnalytics: Boolean) {
+        authRepository.setAnalyticsDisclosureAcknowledged(true)
+        showAnalyticsDisclosure.value = false
+        setAnalyticsEnabled(enableAnalytics)
     }
 
     fun setMinSeedsThreshold(value: Int) {
@@ -641,7 +683,7 @@ class MainViewModel(
                 }
             }
             if (needLoad) {
-                android.util.Log.d("MainViewModel", "onShelfVisible($shelfIndex): catalogIndex=$foundCatalogIdx. Loading range $start..$end")
+                Timber.d("onShelfVisible(%d): catalogIndex=%d. Loading range %d..%d", shelfIndex, foundCatalogIdx, start, end)
                 boardRepository.loadBoardRange(start, end)
             }
         }
@@ -1024,6 +1066,31 @@ class MainViewModel(
     }
 
     fun playStream(option: StreamOption) {
+        if (isMobileDataWarning.value && isUsingMobileData()) {
+            pendingMobileDataStream.value = option
+        } else {
+            proceedWithPlayback(option)
+        }
+    }
+
+    fun confirmMobileDataPlayback() {
+        val option = pendingMobileDataStream.value ?: return
+        pendingMobileDataStream.value = null
+        proceedWithPlayback(option)
+    }
+
+    fun cancelMobileDataPlayback() {
+        pendingMobileDataStream.value = null
+    }
+
+    private fun isUsingMobileData(): Boolean {
+        val connectivityManager = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return false
+        val activeNetwork = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+        return capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
+    }
+
+    private fun proceedWithPlayback(option: StreamOption) {
         playJob?.cancel()
         subtitleObserverJob?.cancel()
         streams.value = streams.value.copy(isResolving = true, error = null)
@@ -1616,7 +1683,7 @@ class MainViewModel(
             try {
                 catalogRepository.syncLibrary()
             } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "Failed to sync library", e)
+                Timber.e(e, "Failed to sync library")
             }
         }
     }
@@ -1626,7 +1693,7 @@ class MainViewModel(
             try {
                 catalogRepository.loadLibrary(request)
             } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "Failed to load library request", e)
+                Timber.e(e, "Failed to load library request")
             }
         }
     }
@@ -1638,7 +1705,7 @@ class MainViewModel(
             try {
                 catalogRepository.loadDiscover(request)
             } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "Failed to load discover request", e)
+                Timber.e(e, "Failed to load discover request")
             }
         }
     }

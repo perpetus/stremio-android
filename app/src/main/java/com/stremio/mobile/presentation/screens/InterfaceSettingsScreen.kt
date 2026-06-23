@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.stremio.mobile.core.theme.AppFont
 import com.stremio.mobile.core.theme.MutedText
 
 @Composable
@@ -20,6 +21,7 @@ fun InterfaceSettingsScreen(
     adaptiveGlassContrast: Boolean,
     glassHapticsEnabled: Boolean,
     hapticsIntensity: String,
+    selectedFont: AppFont,
     onUpdateSettings: (com.stremio.core.types.profile.Profile.Settings) -> Unit,
     onSetGlobalUiStyle: (String) -> Unit,
     onSetGlassEffectsMode: (String) -> Unit,
@@ -27,6 +29,7 @@ fun InterfaceSettingsScreen(
     onSetAdaptiveGlassContrastEnabled: (Boolean) -> Unit,
     onSetGlassHapticsEnabled: (Boolean) -> Unit,
     onSetHapticsIntensity: (String) -> Unit,
+    onSetSelectedFont: (AppFont) -> Unit,
     onBack: () -> Unit
 ) {
     Column(
@@ -34,6 +37,7 @@ fun InterfaceSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         SettingsHeader(title = "Interface Settings", onBack = onBack)
+
 
         if (settings != null) {
             val languages = listOf(
@@ -74,6 +78,15 @@ fun InterfaceSettingsScreen(
                 selectedValue = globalUiStyle,
                 options = uiStyles,
                 onSelect = onSetGlobalUiStyle,
+            )
+
+            val fonts = AppFont.entries.map { it to it.displayName }
+            SettingsDropdownRow(
+                title = "App Typography",
+                selectedValue = selectedFont,
+                options = fonts,
+                onSelect = onSetSelectedFont,
+                description = "Choose the default system font for the application"
             )
 
             SettingsDropdownRow(

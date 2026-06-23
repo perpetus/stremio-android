@@ -8,6 +8,7 @@ import com.stremio.mobile.data.model.LIQUID_GLASS_RECOMMENDED_GLOBAL_ALPHA
 import com.stremio.mobile.data.model.LocalStreamSelection
 import com.stremio.mobile.data.model.LiquidGlassTuning
 import com.stremio.mobile.data.model.StreamOption
+import com.stremio.mobile.core.theme.AppFont
 import com.stremio.mobile.presentation.state.AccountUiState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -18,6 +19,16 @@ class AuthRepository(
     private val context: Context
 ) {
     private val preferences = context.getSharedPreferences("stremio_account", Context.MODE_PRIVATE)
+
+    fun getSelectedFont(): AppFont {
+        val name = preferences.getString("selected_font", AppFont.PLUS_JAKARTA_SANS.name) ?: AppFont.PLUS_JAKARTA_SANS.name
+        return runCatching { AppFont.valueOf(name) }.getOrDefault(AppFont.PLUS_JAKARTA_SANS)
+    }
+
+    fun setSelectedFont(font: AppFont) {
+        preferences.edit().putString("selected_font", font.name).apply()
+    }
+
 
     fun getAccountStateFlow(): Flow<AccountUiState> {
         return core.ctx().map { ctx ->
@@ -75,6 +86,16 @@ class AuthRepository(
     fun isKeepScreenOn(): Boolean = preferences.getBoolean("keep_screen_on", true)
     fun setKeepScreenOn(enabled: Boolean) {
         preferences.edit().putBoolean("keep_screen_on", enabled).apply()
+    }
+
+    fun isAnalyticsEnabled(): Boolean = preferences.getBoolean("analytics_enabled", true)
+    fun setAnalyticsEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean("analytics_enabled", enabled).apply()
+    }
+
+    fun isAnalyticsDisclosureAcknowledged(): Boolean = preferences.getBoolean("analytics_disclosure_acknowledged", false)
+    fun setAnalyticsDisclosureAcknowledged(acknowledged: Boolean) {
+        preferences.edit().putBoolean("analytics_disclosure_acknowledged", acknowledged).apply()
     }
 
     fun getMinSeedsThreshold(): Int = preferences.getInt("min_seeds_threshold", 1)

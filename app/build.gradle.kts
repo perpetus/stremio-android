@@ -1,6 +1,10 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
 }
 
 fun stringPropertyOrEnv(name: String): String? =
@@ -22,6 +26,16 @@ if (hasPartialReleaseSigning) {
     )
 }
 
+val localPropertiesFile = rootProject.file("local.properties")
+val localProperties = Properties()
+if (localPropertiesFile.exists()) {
+    val stream = localPropertiesFile.inputStream()
+    localProperties.load(stream)
+    stream.close()
+}
+val posthogApiKey = (localProperties.getProperty("posthog.apiKey") ?: System.getenv("POSTHOG_API_KEY") ?: "").trim()
+val posthogHost = (localProperties.getProperty("posthog.host") ?: System.getenv("POSTHOG_HOST") ?: "https://us.i.posthog.com").trim()
+
 android {
     namespace = "com.stremio.mobile"
     compileSdk = 37
@@ -36,6 +50,8 @@ android {
         ndk {
             abiFilters.addAll(supportedAbis)
         }
+        buildConfigField("String", "POSTHOG_API_KEY", "\"$posthogApiKey\"")
+        buildConfigField("String", "POSTHOG_HOST", "\"$posthogHost\"")
     }
 
     splits {
@@ -83,6 +99,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
 
@@ -120,6 +137,12 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect:2.4.0")
     implementation("pro.streem.pbandk:pbandk-runtime:0.16.0")
     implementation("com.github.Stremio:stremio-core-kotlin:1.15.0")
+    implementation("com.jakewharton.timber:timber:5.0.1")
+    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
+    implementation(platform("com.google.firebase:firebase-bom:34.15.0"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.posthog:posthog-android:3.51.0")
     testImplementation("junit:junit:4.13.2")
 }
 data class StreamServerTarget(

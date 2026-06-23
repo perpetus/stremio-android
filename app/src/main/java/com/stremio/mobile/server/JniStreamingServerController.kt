@@ -3,7 +3,7 @@ package com.stremio.mobile.server
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.util.Log
+import timber.log.Timber
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,7 +47,7 @@ class JniStreamingServerController(
                 if (waitForServerReady(current.baseUrl, timeoutMs = 750)) {
                     return
                 }
-                Log.w(TAG, "State was Ready but ${current.baseUrl} is not reachable; restarting native server")
+                Timber.tag(TAG).w("State was Ready but %s is not reachable; restarting native server", current.baseUrl)
                 dumpServerLogsToLogcat("ready-state unreachable")
                 stopNativeServer()
             }
@@ -71,7 +71,7 @@ class JniStreamingServerController(
                 }
 
                 if (url != null && waitForServerReady(url)) {
-                    Log.i(TAG, "Streaming server ready at $url")
+                    Timber.tag(TAG).i("Streaming server ready at %s", url)
                     mutableState.value = StreamingServerState.Ready(url)
                 } else {
                     val message = if (url == null) {
@@ -79,13 +79,13 @@ class JniStreamingServerController(
                     } else {
                         "Native server returned $url but did not become reachable"
                     }
-                    Log.e(TAG, message)
+                    Timber.tag(TAG).e(message)
                     dumpServerLogsToLogcat(message)
                     stopNativeServer()
                     mutableState.value = StreamingServerState.Failed(message)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error starting native server", e)
+                Timber.tag(TAG).e(e, "Error starting native server")
                 dumpServerLogsToLogcat("start exception")
                 mutableState.value = StreamingServerState.Failed(e.message ?: "Unknown native error")
                 stopNativeServer()
@@ -135,9 +135,9 @@ class JniStreamingServerController(
 
     private fun dumpServerLogsToLogcat(reason: String) {
         val logDir = File(context.filesDir, "stream-server/logs")
-        Log.e(TAG, "Checking server logs after $reason: ${logDir.absolutePath}")
+        Timber.tag(TAG).e("Checking server logs after %s: %s", reason, logDir.absolutePath)
         if (!logDir.exists()) {
-            Log.e(TAG, "Server log directory does not exist")
+            Timber.tag(TAG).e("Server log directory does not exist")
             return
         }
 
@@ -151,18 +151,18 @@ class JniStreamingServerController(
             .orEmpty()
 
         if (candidates.isEmpty()) {
-            Log.e(TAG, "No server log files found in ${logDir.absolutePath}")
+            Timber.tag(TAG).e("No server log files found in %s", logDir.absolutePath)
             return
         }
 
         candidates.forEach { file ->
-            Log.e(TAG, "---- ${file.name} (${file.length()} bytes) ----")
+            Timber.tag(TAG).e("---- %s (%d bytes) ----", file.name, file.length())
             runCatching {
                 file.readLines().takeLast(120).forEach { line ->
-                    Log.e(TAG, line.take(3500))
+                    Timber.tag(TAG).e(line.take(3500))
                 }
             }.onFailure {
-                Log.e(TAG, "Failed to read ${file.absolutePath}", it)
+                Timber.tag(TAG).e(it, "Failed to read %s", file.absolutePath)
             }
         }
     }

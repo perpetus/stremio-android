@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -95,7 +97,7 @@ fun StremioMobileApp(viewModel: MainViewModel) {
         )
     }
 
-    StremioMobileTheme {
+    StremioMobileTheme(appFont = state.selectedFont) {
         CompositionLocalProvider(
             LocalGlobalUiTheme provides rootGlobalTheme,
             LocalGlassAlpha provides state.globalGlassAlpha,
@@ -151,6 +153,8 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                     onSetHapticsIntensity = viewModel::setHapticsIntensity,
                     onSetLiquidGlassTuning = viewModel::setLiquidGlassTuning,
                     onResetLiquidGlassTuning = viewModel::resetLiquidGlassTuning,
+                    onSetSelectedFont = viewModel::setSelectedFont,
+                    onSetAnalyticsEnabled = viewModel::setAnalyticsEnabled,
                 )
             } else {
                 AuthFlow(
@@ -251,6 +255,43 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                 )
             }
 
+            if (state.showMobileDataWarning) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = viewModel::cancelMobileDataPlayback,
+                    title = {
+                        Text(
+                            text = "Mobile Data Warning",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "You are currently connected to mobile data. Streaming video may consume a significant amount of data. Do you want to continue?",
+                            color = MutedText,
+                            fontSize = 14.sp
+                        )
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = viewModel::confirmMobileDataPlayback
+                        ) {
+                            Text(text = "Stream Anyway", color = AccentPurple, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = viewModel::cancelMobileDataPlayback
+                        ) {
+                            Text(text = "Cancel", color = MutedText)
+                        }
+                    },
+                    containerColor = GlassSurface,
+                    shape = RoundedCornerShape(20.dp),
+                )
+            }
+
             if (isPlayerOpen) {
                 val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
                 PlayerScreen(
@@ -287,6 +328,78 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                     glassHapticsEnabled = state.glassHapticsEnabled,
                     hapticsIntensity = state.hapticsIntensity,
                     liquidGlassTuning = state.liquidGlassTuning,
+                )
+            }
+
+            if (state.showAnalyticsDisclosure) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { /* Block clicks outside */ },
+                    title = {
+                        Text(
+                            text = "Privacy & Analytics Disclosure",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                    },
+                    text = {
+                        val scrollState = rememberScrollState()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = "To help us improve stability and resolve errors, this open-source client collects anonymous crash reports (via Firebase Crashlytics) and usage metrics (via PostHog).",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    lineHeight = 18.sp
+                                )
+                                Text(
+                                    text = "All personally identifiable info (PII) is automatically scrubbed locally on your device, and session recordings mask all text fields and image content.",
+                                    color = MutedText,
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp
+                                )
+                                Text(
+                                    text = "Stremio separate analytics notice:\nNote that the official Stremio backend services, addons, or streaming server core run independently and may collect separate telemetry from this app.",
+                                    color = MutedText,
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "You can change your consent preferences at any time in Android Settings.",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                    },
+                    confirmButton = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ThemedButton(
+                                text = "Opt Out",
+                                onClick = { viewModel.acknowledgeAnalyticsDisclosure(false) },
+                                containerColor = Color(0xFFD32F2F),
+                                modifier = Modifier.weight(1f)
+                            )
+                            ThemedButton(
+                                text = "Accept",
+                                onClick = { viewModel.acknowledgeAnalyticsDisclosure(true) },
+                                containerColor = AccentPurple,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    },
+                    containerColor = Color(0xFF171A20),
+                    shape = RoundedCornerShape(28.dp),
+                    modifier = Modifier.padding(16.dp)
                 )
             }
         }
@@ -340,6 +453,8 @@ private fun BoardScreen(
     onSetHapticsIntensity: (String) -> Unit,
     onSetLiquidGlassTuning: (LiquidGlassTuning) -> Unit,
     onResetLiquidGlassTuning: () -> Unit,
+    onSetSelectedFont: (AppFont) -> Unit,
+    onSetAnalyticsEnabled: (Boolean) -> Unit,
 ) {
     var settingsSubScreen by rememberSaveable { mutableStateOf(SettingsSubScreen.Main) }
 
@@ -644,6 +759,7 @@ private fun BoardScreen(
                                     adaptiveGlassContrast = state.adaptiveGlassContrast,
                                     glassHapticsEnabled = state.glassHapticsEnabled,
                                     hapticsIntensity = state.hapticsIntensity,
+                                    selectedFont = state.selectedFont,
                                     onUpdateSettings = onUpdateProfileSettings,
                                     onSetGlobalUiStyle = onSetGlobalUiStyle,
                                     onSetGlassEffectsMode = onSetGlassEffectsMode,
@@ -651,6 +767,7 @@ private fun BoardScreen(
                                     onSetAdaptiveGlassContrastEnabled = onSetAdaptiveGlassContrastEnabled,
                                     onSetGlassHapticsEnabled = onSetGlassHapticsEnabled,
                                     onSetHapticsIntensity = onSetHapticsIntensity,
+                                    onSetSelectedFont = onSetSelectedFont,
                                     onBack = { settingsSubScreen = SettingsSubScreen.Main }
                                 )
                             }
@@ -700,6 +817,8 @@ private fun BoardScreen(
                                     onSetMobileDataWarning = onSetMobileDataWarning,
                                     isKeepScreenOn = state.isKeepScreenOn,
                                     onSetKeepScreenOn = onSetKeepScreenOn,
+                                    isAnalyticsEnabled = state.isAnalyticsEnabled,
+                                    onSetAnalyticsEnabled = onSetAnalyticsEnabled,
                                     onBack = { settingsSubScreen = SettingsSubScreen.Main }
                                 )
                             }
