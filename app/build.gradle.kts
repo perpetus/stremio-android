@@ -127,6 +127,8 @@ dependencies {
 
     implementation("com.facebook.android:facebook-login:18.2.3")
 
+    implementation(files("libs/rustls-platform-verifier-0.1.1.aar"))
+
     implementation("androidx.media3:media3-exoplayer:1.10.1")
     implementation("androidx.media3:media3-ui:1.10.1")
     implementation("androidx.media3:media3-session:1.10.1")

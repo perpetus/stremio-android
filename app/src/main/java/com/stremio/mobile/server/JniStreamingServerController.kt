@@ -31,7 +31,7 @@ class JniStreamingServerController(
         }
 
         @JvmStatic
-        private external fun startServerNative(configDir: String, cacheDir: String, port: Int): String?
+        private external fun startServerNative(context: Context, configDir: String, cacheDir: String, port: Int): String?
 
         @JvmStatic
         private external fun stopServerNative()
@@ -67,7 +67,7 @@ class JniStreamingServerController(
 
                     val configDir = File(context.filesDir, "stream-server").absolutePath
                     val cacheDir = File(context.cacheDir, "stream-server").absolutePath
-                    startServerNative(configDir, cacheDir, 11470)
+                    startServerNative(context.applicationContext, configDir, cacheDir, 11470)
                 }
 
                 if (url != null && waitForServerReady(url)) {

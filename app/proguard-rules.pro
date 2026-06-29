@@ -5,6 +5,7 @@
 
 # Keep the JNI entry point classes
 -keep class com.stremio.core.** { *; }
+-keep, includedescriptorclasses class org.rustls.platformverifier.** { *; }
 
 # Keep protobuf runtime classes used by pbandk
 -keep class pbandk.** { *; }
@@ -15,4 +16,3 @@
 -keep class com.stremio.mobile.MainActivity { *; }
 -keep class com.stremio.mobile.server.ServerService { *; }
 -keep class com.stremio.mobile.server.BootReceiver { *; }
-
