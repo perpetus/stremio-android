@@ -71,6 +71,8 @@ import com.stremio.mobile.presentation.navigation.toAppView
 import com.stremio.mobile.presentation.navigation.toSection
 import com.stremio.mobile.presentation.state.MainSection
 import com.stremio.mobile.presentation.viewmodel.MainViewModel
+import com.stremio.mobile.update.UpdateInfo
+import java.io.File
 
 @Composable
 fun StremioMobileApp(viewModel: MainViewModel) {
@@ -155,6 +157,11 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                     onResetLiquidGlassTuning = viewModel::resetLiquidGlassTuning,
                     onSetSelectedFont = viewModel::setSelectedFont,
                     onSetAnalyticsEnabled = viewModel::setAnalyticsEnabled,
+                    onSetAutoUpdateEnabled = viewModel::setAutoUpdateEnabled,
+                    onCheckForUpdates = { viewModel.checkForUpdates(manual = true) },
+                    onDownloadAndInstallUpdate = viewModel::downloadAndInstallUpdate,
+                    onInstallDownloadedUpdate = viewModel::installDownloadedUpdate,
+                    onIgnoreUpdate = viewModel::ignoreUpdate,
                 )
             } else {
                 AuthFlow(
@@ -455,6 +462,11 @@ private fun BoardScreen(
     onResetLiquidGlassTuning: () -> Unit,
     onSetSelectedFont: (AppFont) -> Unit,
     onSetAnalyticsEnabled: (Boolean) -> Unit,
+    onSetAutoUpdateEnabled: (Boolean) -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onDownloadAndInstallUpdate: (UpdateInfo) -> Unit,
+    onInstallDownloadedUpdate: (File) -> Unit,
+    onIgnoreUpdate: (String) -> Unit,
 ) {
     var settingsSubScreen by rememberSaveable { mutableStateOf(SettingsSubScreen.Main) }
 
@@ -845,6 +857,13 @@ private fun BoardScreen(
                                     serverVersion = state.serverVersion,
                                     serverConfigPath = state.serverConfigPath,
                                     serverCachePath = state.serverCachePath,
+                                    updateState = state.updateState,
+                                    isAutoUpdateEnabled = state.isAutoUpdateEnabled,
+                                    onSetAutoUpdateEnabled = onSetAutoUpdateEnabled,
+                                    onCheckForUpdates = onCheckForUpdates,
+                                    onDownloadAndInstallUpdate = onDownloadAndInstallUpdate,
+                                    onInstallDownloadedUpdate = onInstallDownloadedUpdate,
+                                    onIgnoreUpdate = onIgnoreUpdate,
                                     onBack = { settingsSubScreen = SettingsSubScreen.Main }
                                 )
                             }

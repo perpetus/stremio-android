@@ -32,6 +32,8 @@ class MainActivity : ComponentActivity() {
                     catalogRepository = app.container.catalogRepository,
                     addonRepository = app.container.addonRepository,
                     playbackRepository = app.container.playbackRepository,
+                    updateRepository = app.container.updateRepository,
+                    apkInstaller = app.container.apkInstaller,
                     serverController = app.container.serverController,
                     core = app.container.core,
                     appContext = app.applicationContext,

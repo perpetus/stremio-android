@@ -13,6 +13,8 @@ import com.stremio.mobile.data.repository.AuthRepository
 import com.stremio.mobile.data.repository.BoardRepository
 import com.stremio.mobile.data.repository.CatalogRepository
 import com.stremio.mobile.data.repository.PlaybackRepository
+import com.stremio.mobile.update.ApkInstaller
+import com.stremio.mobile.update.UpdateRepository
 
 class AppContainer(context: Context) {
     val playbackManager = PlaybackManager(context.applicationContext)
@@ -29,6 +31,8 @@ class AppContainer(context: Context) {
     val catalogRepository = CatalogRepository(core)
     val addonRepository = AddonRepository(core)
     val playbackRepository = PlaybackRepository(core, playbackManager)
+    val updateRepository = UpdateRepository(context.applicationContext)
+    val apkInstaller = ApkInstaller(context.applicationContext)
 
     val serverController: StreamingServerController = try {
         JniStreamingServerController(context, useForegroundService = { authRepository.isServerInForeground() })
@@ -38,4 +42,3 @@ class AppContainer(context: Context) {
     }
 
 }
-

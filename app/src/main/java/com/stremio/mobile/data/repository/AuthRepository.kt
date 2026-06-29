@@ -98,6 +98,21 @@ class AuthRepository(
         preferences.edit().putBoolean("analytics_disclosure_acknowledged", acknowledged).apply()
     }
 
+    fun isAutoUpdateEnabled(): Boolean = preferences.getBoolean("auto_update_enabled", true)
+    fun setAutoUpdateEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean("auto_update_enabled", enabled).apply()
+    }
+
+    fun getLastUpdateCheckMs(): Long = preferences.getLong("last_update_check_ms", 0L)
+    fun setLastUpdateCheckMs(value: Long) {
+        preferences.edit().putLong("last_update_check_ms", value).apply()
+    }
+
+    fun getIgnoredUpdateVersion(): String? = preferences.getString("ignored_update_version", null)
+    fun setIgnoredUpdateVersion(value: String?) {
+        preferences.edit().putString("ignored_update_version", value).apply()
+    }
+
     fun getMinSeedsThreshold(): Int = preferences.getInt("min_seeds_threshold", 1)
     fun setMinSeedsThreshold(value: Int) {
         preferences.edit().putInt("min_seeds_threshold", value).apply()

@@ -6,6 +6,7 @@ import com.stremio.mobile.data.model.LiquidGlassTuning
 import com.stremio.mobile.data.model.LIQUID_GLASS_RECOMMENDED_GLOBAL_ALPHA
 import com.stremio.mobile.data.model.MetaDetails
 import com.stremio.mobile.server.StreamingServerState
+import com.stremio.mobile.update.UpdateState
 
 data class MainUiState(
     val server: StreamingServerState = StreamingServerState.Stopped,
@@ -13,7 +14,7 @@ data class MainUiState(
 
     val serverPingStatus: String = "Not checked",
     val isPingLoading: Boolean = false,
-    val serverVersion: String = "0.1.5",
+    val serverVersion: String = "0.1.8",
     val serverConfigPath: String = "",
     val serverCachePath: String = "",
     val latestIntentUri: String? = null,
@@ -61,4 +62,6 @@ data class MainUiState(
     val glassHapticsEnabled: Boolean = true,
     val hapticsIntensity: String = "Medium",
     val liquidGlassTuning: LiquidGlassTuning = LiquidGlassTuning(),
+    val updateState: UpdateState = UpdateState.Idle,
+    val isAutoUpdateEnabled: Boolean = true,
 )

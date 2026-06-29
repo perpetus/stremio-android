@@ -24,6 +24,10 @@ import timber.log.Timber
 import com.stremio.mobile.presentation.state.*
 import com.stremio.mobile.server.StreamingServerController
 import com.stremio.mobile.server.StreamingServerState
+import com.stremio.mobile.update.ApkInstaller
+import com.stremio.mobile.update.UpdateInfo
+import com.stremio.mobile.update.UpdateRepository
+import com.stremio.mobile.update.UpdateState
 
 import java.io.File
 import java.net.HttpURLConnection
@@ -54,6 +58,8 @@ class MainViewModel(
     private val catalogRepository: CatalogRepository,
     private val addonRepository: AddonRepository,
     private val playbackRepository: PlaybackRepository,
+    private val updateRepository: UpdateRepository,
+    private val apkInstaller: ApkInstaller,
     private val serverController: StreamingServerController,
     private val core: StremioCore,
     appContext: Context,
@@ -96,6 +102,9 @@ class MainViewModel(
     private val isKeepScreenOn = MutableStateFlow(authRepository.isKeepScreenOn())
     private val isAnalyticsEnabled = MutableStateFlow(authRepository.isAnalyticsEnabled())
     private val showAnalyticsDisclosure = MutableStateFlow(!authRepository.isAnalyticsDisclosureAcknowledged())
+    private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
+    val updateState: StateFlow<UpdateState> = _updateState
+    private val isAutoUpdateEnabled = MutableStateFlow(authRepository.isAutoUpdateEnabled())
     private val isTraktAuthenticated = MutableStateFlow(false)
     private val isSeedingEnabled = MutableStateFlow(true)
     private val minSeedsThreshold = MutableStateFlow(authRepository.getMinSeedsThreshold())
@@ -114,6 +123,7 @@ class MainViewModel(
 
     private var lastServerActivityMs: Long = System.currentTimeMillis()
     private val IDLE_TIMEOUT_MS = 5 * 60 * 1000L // 5 minutes
+    private val UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
 
     private val serverPingStatus = MutableStateFlow("Not checked")
     private val isPingLoading = MutableStateFlow(false)
@@ -201,7 +211,9 @@ class MainViewModel(
             selectedFont,
             pendingMobileDataStream,
             isAnalyticsEnabled,
-            showAnalyticsDisclosure
+            showAnalyticsDisclosure,
+            _updateState,
+            isAutoUpdateEnabled,
         )
     ) { values ->
         MainUiState(
@@ -210,9 +222,11 @@ class MainViewModel(
             showMobileDataWarning = values[46] != null,
             isAnalyticsEnabled = values[47] as Boolean,
             showAnalyticsDisclosure = values[48] as Boolean,
+            updateState = values[49] as UpdateState,
+            isAutoUpdateEnabled = values[50] as Boolean,
             serverPingStatus = values[1] as String,
             isPingLoading = values[2] as Boolean,
-            serverVersion = "0.1.5",
+            serverVersion = "0.1.8",
             serverConfigPath = configPath,
             serverCachePath = cachePath,
             latestIntentUri = values[3] as String?,
@@ -274,6 +288,7 @@ class MainViewModel(
         observeCoreAuth()
         observeStreamingServer()
         restoreCoreSession()
+        maybeAutoCheckForUpdates()
 
         viewModelScope.launch {
             while (true) {
@@ -517,6 +532,96 @@ class MainViewModel(
         
         com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance()
             .setCrashlyticsCollectionEnabled(enabled)
+    }
+
+    fun setAutoUpdateEnabled(enabled: Boolean) {
+        authRepository.setAutoUpdateEnabled(enabled)
+        isAutoUpdateEnabled.value = enabled
+        if (enabled) {
+            maybeAutoCheckForUpdates()
+        }
+    }
+
+    private fun maybeAutoCheckForUpdates() {
+        if (!isAutoUpdateEnabled.value) return
+        val lastCheckMs = authRepository.getLastUpdateCheckMs()
+        if (System.currentTimeMillis() - lastCheckMs < UPDATE_CHECK_INTERVAL_MS) return
+        checkForUpdates(manual = false)
+    }
+
+    fun checkForUpdates(manual: Boolean) {
+        viewModelScope.launch {
+            if (!manual) {
+                if (!isAutoUpdateEnabled.value) return@launch
+                val lastCheckMs = authRepository.getLastUpdateCheckMs()
+                if (System.currentTimeMillis() - lastCheckMs < UPDATE_CHECK_INTERVAL_MS) return@launch
+            }
+
+            _updateState.value = UpdateState.Checking
+            when (val result = runCatching { updateRepository.check() }.getOrElse { error ->
+                UpdateState.Error(error.message ?: "Update check failed.")
+            }) {
+                is UpdateState.Available -> {
+                    authRepository.setLastUpdateCheckMs(System.currentTimeMillis())
+                    if (!manual && authRepository.getIgnoredUpdateVersion() == result.info.tagName) {
+                        _updateState.value = UpdateState.Idle
+                    } else {
+                        _updateState.value = result
+                    }
+                }
+                is UpdateState.UpToDate -> {
+                    authRepository.setLastUpdateCheckMs(System.currentTimeMillis())
+                    _updateState.value = result
+                }
+                is UpdateState.Error -> {
+                    if (manual) {
+                        _updateState.value = result
+                    } else {
+                        Timber.e("Auto update check failed: ${result.message}")
+                        _updateState.value = UpdateState.Idle
+                    }
+                }
+                else -> {
+                    _updateState.value = result
+                }
+            }
+        }
+    }
+
+    fun downloadAndInstallUpdate(info: UpdateInfo) {
+        viewModelScope.launch {
+            runCatching {
+                val file = updateRepository.download(info) { bytesRead, totalBytes ->
+                    _updateState.value = UpdateState.Downloading(
+                        bytesRead = bytesRead,
+                        totalBytes = totalBytes,
+                        progress = totalBytes?.takeIf { it > 0L }?.let { bytesRead.toFloat() / it.toFloat() },
+                    )
+                }
+                installDownloadedUpdate(file)
+            }.onFailure { error ->
+                Timber.e(error, "Failed to download update")
+                _updateState.value = UpdateState.Error(error.message ?: "Update download failed.")
+            }
+        }
+    }
+
+    fun installDownloadedUpdate(file: File) {
+        runCatching {
+            val needsPermission = apkInstaller.install(file)
+            _updateState.value = UpdateState.ReadyToInstall(
+                file = file,
+                needsUnknownSourcesPermission = needsPermission,
+            )
+        }.onFailure { error ->
+            Timber.e(error, "Failed to launch APK installer")
+            _updateState.value = UpdateState.Error(error.message ?: "Could not open the system installer.")
+        }
+    }
+
+    fun ignoreUpdate(tagName: String) {
+        authRepository.setIgnoredUpdateVersion(tagName)
+        _updateState.value = UpdateState.Idle
     }
 
     fun acknowledgeAnalyticsDisclosure(enableAnalytics: Boolean) {
