@@ -16,6 +16,7 @@ import com.stremio.mobile.core.theme.MutedText
 fun InterfaceSettingsScreen(
     settings: com.stremio.core.types.profile.Profile.Settings?,
     globalUiStyle: String,
+    playerUiStyle: String,
     glassEffectsMode: String,
     globalGlassAlpha: Float,
     adaptiveGlassContrast: Boolean,
@@ -24,6 +25,7 @@ fun InterfaceSettingsScreen(
     selectedFont: AppFont,
     onUpdateSettings: (com.stremio.core.types.profile.Profile.Settings) -> Unit,
     onSetGlobalUiStyle: (String) -> Unit,
+    onSetPlayerUiStyle: (String) -> Unit,
     onSetGlassEffectsMode: (String) -> Unit,
     onSetGlobalGlassAlpha: (Float) -> Unit,
     onSetAdaptiveGlassContrastEnabled: (Boolean) -> Unit,
@@ -54,6 +56,11 @@ fun InterfaceSettingsScreen(
                 "classic" to "Classic",
                 "modern" to "Modern (Liquid Glass)",
             )
+            val playerUiStyles = listOf(
+                "global" to "Follow Global Theme",
+                "classic" to "Classic",
+                "modern" to "Modern (Liquid Glass)",
+            )
             val glassEffects = listOf(
                 "balanced" to "Balanced",
                 "full" to "Full Blur",
@@ -78,6 +85,14 @@ fun InterfaceSettingsScreen(
                 selectedValue = globalUiStyle,
                 options = uiStyles,
                 onSelect = onSetGlobalUiStyle,
+            )
+
+            SettingsDropdownRow(
+                title = "Player UI Style",
+                selectedValue = playerUiStyle,
+                options = playerUiStyles,
+                onSelect = onSetPlayerUiStyle,
+                description = "Choose the theme style specifically for the video player"
             )
 
             val fonts = AppFont.entries.map { it to it.displayName }

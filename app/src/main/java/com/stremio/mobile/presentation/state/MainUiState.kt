@@ -32,6 +32,7 @@ data class MainUiState(
     val minDownloadSpeedBps: Long = 50_000L,
     val preferredQuality: String = "Any",
     val globalUiStyle: String = "classic",
+    val playerUiStyle: String = "global",
     val glassEffectsMode: String = "balanced",
     val isAutoSwitchOnDeadStream: Boolean = false,
     val showNoSeedsBanner: Boolean = false,

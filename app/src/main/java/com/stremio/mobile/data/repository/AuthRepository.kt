@@ -177,6 +177,20 @@ class AuthRepository(
         preferences.edit().putString("global_ui_style", if (value == "modern") "modern" else "classic").apply()
     }
 
+    fun getPlayerUiStyle(): String {
+        return preferences.getString("player_ui_style", "global") ?: "global"
+    }
+
+    fun setPlayerUiStyle(value: String) {
+        val resolved = when (value) {
+            "classic" -> "classic"
+            "modern" -> "modern"
+            else -> "global"
+        }
+        preferences.edit().putString("player_ui_style", resolved).apply()
+    }
+
+
     fun getGlassEffectsMode(): String {
         return when (preferences.getString("glass_effects_mode", "balanced")) {
             "full" -> "full"

@@ -544,7 +544,7 @@ class StremioCore(context: Context) {
             is Stream.Source.Url -> source.value.url
             is Stream.Source.Tramvai -> {
                 val t = source.value
-                "$STREAMING_SERVER_BASE/${t.infoHash}/${t.fileIdx ?: 0}"
+                "$STREAMING_SERVER_BASE/${t.infoHash}/${t.fileIdx ?: STREAMING_SERVER_AUTO_FILE_INDEX}"
             }
             is Stream.Source.External -> source.value.externalUrl
             else -> null
@@ -575,6 +575,7 @@ class StremioCore(context: Context) {
 
     companion object {
         const val STREAMING_SERVER_BASE = "http://127.0.0.1:11470"
+        const val STREAMING_SERVER_AUTO_FILE_INDEX = -1
         private const val DEVICE_NAME = "android"
     }
 }

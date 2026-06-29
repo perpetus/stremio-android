@@ -1,17 +1,25 @@
 package com.stremio.mobile.presentation.components
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,12 +44,84 @@ fun FeaturedHero(
     item: CatalogItem?,
     onClick: (CatalogItem) -> Unit,
 ) {
+    FeaturedHeroCard(item = item, onClick = onClick)
+}
+
+@Composable
+fun FeaturedHeroPager(
+    items: List<CatalogItem>,
+    onClick: (CatalogItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (items.isEmpty()) return
+    if (items.size == 1) {
+        FeaturedHeroCard(item = items.first(), onClick = onClick, modifier = modifier)
+        return
+    }
+
+    val pagerState = rememberPagerState(pageCount = { items.size })
+
+    LaunchedEffect(key1 = items) {
+        while (true) {
+            kotlinx.coroutines.delay(5000)
+            if (!pagerState.isScrollInProgress) {
+                val nextPage = (pagerState.currentPage + 1) % items.size
+                pagerState.animateScrollToPage(nextPage)
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(230.dp)
+    ) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            FeaturedHeroCard(
+                item = items[page],
+                onClick = onClick,
+            )
+        }
+
+        Row(
+            Modifier
+                .height(20.dp)
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 14.dp),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            repeat(items.size) { iteration ->
+                val isSelected = pagerState.currentPage == iteration
+                val width = animateDpAsState(targetValue = if (isSelected) 12.dp else 6.dp, label = "width")
+                val alpha = androidx.compose.animation.core.animateFloatAsState(targetValue = if (isSelected) 1f else 0.4f, label = "alpha")
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 3.dp)
+                        .height(6.dp)
+                        .width(width.value)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = alpha.value))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun FeaturedHeroCard(
+    item: CatalogItem?,
+    onClick: (CatalogItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     if (item == null) {
         return
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(230.dp)
             .padding(start = ScreenGutter, end = ScreenGutter)

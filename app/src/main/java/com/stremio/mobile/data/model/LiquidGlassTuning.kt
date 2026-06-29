@@ -4,12 +4,12 @@ const val LIQUID_GLASS_RECOMMENDED_GLOBAL_ALPHA = 0.50f
 
 data class LiquidGlassTuning(
     // Defaults follow kyant/backdrop's glass bottom bar and interactive glass
-    // examples: 4.dp blur, 16/32 dp lens refraction, and 0.5 white surface.
+    // examples: 1.4.dp blur, 24/44.3 dp lens refraction, and 0.05 white surface.
     // Toggle/slider thumbs use the smaller reference values internally.
-    val blurDp: Float = 4f,
-    val refractionHeightDp: Float = 16f,
-    val refractionAmountDp: Float = 32f,
-    val surfaceAlpha: Float = 0.50f,
+    val blurDp: Float = 1.4f,
+    val refractionHeightDp: Float = 24f,
+    val refractionAmountDp: Float = 44.3f,
+    val surfaceAlpha: Float = 0.05f,
     val highlightAlpha: Float = 0.55f,
     val borderAlpha: Float = 0.35f,
     val shadowAlpha: Float = 0.30f,

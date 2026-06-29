@@ -43,6 +43,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.platform.LocalAutofillManager
 import com.facebook.FacebookCallback
 import com.facebook.FacebookException
 import com.facebook.login.LoginManager
@@ -268,6 +272,7 @@ private fun LoginScreen(
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
+    val autofillManager = LocalAutofillManager.current
 
     AuthFormScaffold(
         title = "Log in",
@@ -276,17 +281,26 @@ private fun LoginScreen(
         error = error,
         onBack = onBack,
     ) {
-        AuthTextField(value = email, onValueChange = { email = it }, label = "Email")
+        AuthTextField(
+            value = email,
+            onValueChange = { email = it },
+            label = "Email",
+            modifier = Modifier.semantics { contentType = ContentType.EmailAddress }
+        )
         AuthTextField(
             value = password,
             onValueChange = { password = it },
             label = "Password",
             isPassword = true,
+            modifier = Modifier.semantics { contentType = ContentType.Password }
         )
         AuthButton(
             text = if (isLoading) "Logging in..." else "Log in",
             enabled = !isLoading,
-            onClick = { onSubmit(email, password) },
+            onClick = {
+                autofillManager?.commit()
+                onSubmit(email, password)
+            },
         )
         TextLink(
             text = "Don't have an account? Sign up",
@@ -311,6 +325,8 @@ private fun SignupScreen(
     var marketing by rememberSaveable { mutableStateOf(false) }
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
 
+    val autofillManager = LocalAutofillManager.current
+
     AuthFormScaffold(
         title = "Sign up",
         subtitle = "Create a Stremio account to keep your library and addon setup available on every device.",
@@ -318,18 +334,25 @@ private fun SignupScreen(
         error = localError ?: error,
         onBack = onBack,
     ) {
-        AuthTextField(value = email, onValueChange = { email = it }, label = "Email")
+        AuthTextField(
+            value = email,
+            onValueChange = { email = it },
+            label = "Email",
+            modifier = Modifier.semantics { contentType = ContentType.EmailAddress }
+        )
         AuthTextField(
             value = password,
             onValueChange = { password = it },
             label = "Password",
             isPassword = true,
+            modifier = Modifier.semantics { contentType = ContentType.NewPassword }
         )
         AuthTextField(
             value = passwordConfirm,
             onValueChange = { passwordConfirm = it },
             label = "Confirm password",
             isPassword = true,
+            modifier = Modifier.semantics { contentType = ContentType.NewPassword }
         )
         AuthCheckRow(
             checked = acceptedTerms,
@@ -357,6 +380,7 @@ private fun SignupScreen(
                     else -> null
                 }
                 if (localError == null) {
+                    autofillManager?.commit()
                     onSubmit(email, password, marketing)
                 }
             },
@@ -435,11 +459,12 @@ private fun AuthTextField(
     onValueChange: (String) -> Unit,
     label: String,
     isPassword: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         label = { Text(label) },
         singleLine = true,
         visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,

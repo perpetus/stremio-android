@@ -147,6 +147,7 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                     onSetMinDownloadSpeedBps = viewModel::setMinDownloadSpeedBps,
                     onSetPreferredQuality = viewModel::setPreferredQuality,
                     onSetGlobalUiStyle = viewModel::setGlobalUiStyle,
+                    onSetPlayerUiStyle = viewModel::setPlayerUiStyle,
                     onSetGlassEffectsMode = viewModel::setGlassEffectsMode,
                     onSetAutoSwitchOnDeadStream = viewModel::setAutoSwitchOnDeadStream,
                     onSetGlobalGlassAlpha = viewModel::setGlobalGlassAlpha,
@@ -328,7 +329,7 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                     showNoSeedsBanner = state.showNoSeedsBanner,
                     noSeedsReason = state.noSeedsReason,
                     onPlayNextBestStream = { viewModel.playNextBestStream() },
-                    globalUiStyle = state.globalUiStyle,
+                    globalUiStyle = if (state.playerUiStyle == "global") state.globalUiStyle else state.playerUiStyle,
                     glassEffectsMode = state.glassEffectsMode,
                     globalGlassAlpha = state.globalGlassAlpha,
                     adaptiveGlassContrast = state.adaptiveGlassContrast,
@@ -452,6 +453,7 @@ private fun BoardScreen(
     onSetMinDownloadSpeedBps: (Long) -> Unit,
     onSetPreferredQuality: (String) -> Unit,
     onSetGlobalUiStyle: (String) -> Unit,
+    onSetPlayerUiStyle: (String) -> Unit,
     onSetGlassEffectsMode: (String) -> Unit,
     onSetAutoSwitchOnDeadStream: (Boolean) -> Unit,
     onSetGlobalGlassAlpha: (Float) -> Unit,
@@ -556,11 +558,11 @@ private fun BoardScreen(
             }
             when (state.selectedSection) {
                 MainSection.Home -> {
-                    val heroItem = state.boardShelves.firstOrNull()?.items?.firstOrNull()
-                    if (heroItem != null) {
+                    val featuredItems = state.boardShelves.firstOrNull()?.items?.take(5) ?: emptyList()
+                    if (featuredItems.isNotEmpty()) {
                         item(contentType = "hero") {
-                            FeaturedHero(
-                                item = heroItem,
+                            FeaturedHeroPager(
+                                items = featuredItems,
                                 onClick = { item -> onOpenDetails(item) },
                             )
                         }
@@ -766,6 +768,7 @@ private fun BoardScreen(
                                 InterfaceSettingsScreen(
                                     settings = state.profileSettings,
                                     globalUiStyle = state.globalUiStyle,
+                                    playerUiStyle = state.playerUiStyle,
                                     glassEffectsMode = state.glassEffectsMode,
                                     globalGlassAlpha = state.globalGlassAlpha,
                                     adaptiveGlassContrast = state.adaptiveGlassContrast,
@@ -774,6 +777,7 @@ private fun BoardScreen(
                                     selectedFont = state.selectedFont,
                                     onUpdateSettings = onUpdateProfileSettings,
                                     onSetGlobalUiStyle = onSetGlobalUiStyle,
+                                    onSetPlayerUiStyle = onSetPlayerUiStyle,
                                     onSetGlassEffectsMode = onSetGlassEffectsMode,
                                     onSetGlobalGlassAlpha = onSetGlobalGlassAlpha,
                                     onSetAdaptiveGlassContrastEnabled = onSetAdaptiveGlassContrastEnabled,

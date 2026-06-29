@@ -8,6 +8,10 @@ import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import okhttp3.OkHttpClient
+import okhttp3.Dns
+import java.net.InetAddress
 import okio.Path.Companion.toPath
 
 import timber.log.Timber
@@ -80,6 +84,7 @@ class MainApplication : Application(), SingletonImageLoader.Factory {
             }
             PostHogAndroid.setup(this, posthogConfig)
         }
+
     }
 
     override fun newImageLoader(context: Context): ImageLoader {
@@ -94,6 +99,21 @@ class MainApplication : Application(), SingletonImageLoader.Factory {
                     .directory(context.cacheDir.resolve("image_cache").absolutePath.toPath())
                     .maxSizeBytes(1024L * 1024L * 250L) // 250 MB
                     .build()
+            }
+            .components {
+                add(
+                    OkHttpNetworkFetcherFactory(
+                        callFactory = {
+                            OkHttpClient.Builder()
+                                .dns(object : Dns {
+                                    override fun lookup(hostname: String): List<InetAddress> {
+                                        return Dns.SYSTEM.lookup(hostname).sortedBy { it is java.net.Inet6Address }
+                                    }
+                                })
+                                .build()
+                        }
+                    )
+                )
             }
             .build()
     }

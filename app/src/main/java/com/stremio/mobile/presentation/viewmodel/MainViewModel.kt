@@ -111,6 +111,7 @@ class MainViewModel(
     private val minDownloadSpeedBps = MutableStateFlow(authRepository.getMinDownloadSpeedBps())
     private val preferredQuality = MutableStateFlow(authRepository.getPreferredQuality())
     private val globalUiStyle = MutableStateFlow(authRepository.getGlobalUiStyle())
+    private val playerUiStyle = MutableStateFlow(authRepository.getPlayerUiStyle())
     private val glassEffectsMode = MutableStateFlow(authRepository.getGlassEffectsMode())
     private val isAutoSwitchOnDeadStream = MutableStateFlow(authRepository.isAutoSwitchOnDeadStream())
     private val globalGlassAlpha = MutableStateFlow(authRepository.getGlobalGlassAlpha())
@@ -214,6 +215,7 @@ class MainViewModel(
             showAnalyticsDisclosure,
             _updateState,
             isAutoUpdateEnabled,
+            playerUiStyle,
         )
     ) { values ->
         MainUiState(
@@ -262,6 +264,7 @@ class MainViewModel(
             minDownloadSpeedBps = values[33] as Long,
             preferredQuality = values[34] as String,
             globalUiStyle = values[35] as String,
+            playerUiStyle = values[51] as String,
             glassEffectsMode = values[36] as String,
             isAutoSwitchOnDeadStream = values[37] as Boolean,
             showNoSeedsBanner = values[38] as Boolean,
@@ -648,6 +651,15 @@ class MainViewModel(
     fun setGlobalUiStyle(value: String) {
         authRepository.setGlobalUiStyle(value)
         globalUiStyle.value = if (value == "modern") "modern" else "classic"
+    }
+
+    fun setPlayerUiStyle(value: String) {
+        authRepository.setPlayerUiStyle(value)
+        playerUiStyle.value = when (value) {
+            "classic" -> "classic"
+            "modern" -> "modern"
+            else -> "global"
+        }
     }
 
     fun setGlassEffectsMode(value: String) {
@@ -1281,7 +1293,7 @@ class MainViewModel(
         val source = option.core.stream.source
         if (source !is com.stremio.core.types.resource.Stream.Source.Tramvai) return
         val infoHash = source.value.infoHash
-        val fileIndex = source.value.fileIdx ?: 0
+        val fileIndex = source.value.fileIdx ?: StremioCore.STREAMING_SERVER_AUTO_FILE_INDEX
 
         noSeedsPollJob = viewModelScope.launch {
             while (true) {
