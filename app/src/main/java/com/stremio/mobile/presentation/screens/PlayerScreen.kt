@@ -16,8 +16,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,9 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.automirrored.outlined.VolumeMute
-import androidx.compose.material.icons.automirrored.outlined.VolumeDown
-import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.*
@@ -58,6 +53,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
@@ -84,6 +80,9 @@ import com.stremio.mobile.presentation.screens.player.ClassicPlayerControls
 import com.stremio.mobile.presentation.screens.player.ModernPlayerControls
 import com.stremio.mobile.presentation.screens.player.PlayerControlsActions
 import com.stremio.mobile.presentation.screens.player.PlayerControlsState
+import com.stremio.mobile.presentation.screens.player.PlayerGestureOverlays
+import com.stremio.mobile.presentation.screens.player.playerGestures
+import com.stremio.mobile.presentation.screens.player.rememberPlayerGestureState
 import com.stremio.mobile.presentation.components.LocalGlassAlpha
 import com.stremio.mobile.presentation.components.LocalGlobalUiTheme
 import com.stremio.mobile.presentation.components.GlobalUiTheme
@@ -91,9 +90,6 @@ import com.stremio.mobile.presentation.components.LocalGlobalBackdrop
 import com.stremio.mobile.presentation.components.ThemedButton
 import com.stremio.mobile.presentation.components.ThemedTextButton
 import com.stremio.mobile.presentation.components.ThemedIconButton
-
-/** A full screen-width horizontal swipe seeks across this much of the video, VLC-style. */
-private const val SEEK_GESTURE_RANGE_MS = 90_000L
 
 @Composable
 fun PlayerScreen(
@@ -183,6 +179,11 @@ fun PlayerScreen(
     var resizeMode by remember { mutableStateOf(PlayerResizeMode.FIT) }
     var showControls by remember { mutableStateOf(true) }
     var lastActivityTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    val coroutineScope = rememberCoroutineScope()
+    var singleTapJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    // Timestamp of the last gesture-driven (silent) seek. Used to ignore the pause→buffer→resume
+    // playback transitions it triggers, so a swipe/double-tap seek never wakes the controls.
+    var lastSilentSeekMs by remember { mutableStateOf(0L) }
 
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -191,18 +192,13 @@ fun PlayerScreen(
         uri?.let(onLocalSubtitlePicked)
     }
 
-    // Gesture control state
-    var gestureVolume by remember { mutableFloatStateOf(0f) }
-    var gestureBrightness by remember { mutableFloatStateOf(0f) }
-    var activeGestureType by remember { mutableStateOf<String?>(null) }
-    var showGestureOverlay by remember { mutableStateOf(false) }
+    // Gesture state lives in its own holder (PlayerGestures.kt) so that background player-state
+    // changes (buffering, play/pause) can't resurface the controls overlay mid-gesture.
+    val gestureState = rememberPlayerGestureState()
+    // isMuted / lastVolume are shared with the controls' mute button, so they stay here.
     var isMuted by remember { mutableStateOf(false) }
     val initialVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
     var lastVolume by remember { mutableIntStateOf(if (initialVol > 0) initialVol else (audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) * 0.3f).toInt()) }
-
-    // VLC-style horizontal swipe-to-seek gesture state
-    var seekGestureStartMs by remember { mutableStateOf(0L) }
-    var seekPreviewMs by remember { mutableStateOf<Long?>(null) }
 
     // Orientation & Status Bar visibility management
     DisposableEffect(activity) {
@@ -230,23 +226,11 @@ fun PlayerScreen(
         }
     }
 
-    // Auto-hide gesture overlay after dragging stops
-    LaunchedEffect(activeGestureType) {
-        if (activeGestureType == null && showGestureOverlay) {
-            delay(1000)
-            showGestureOverlay = false
-        }
-    }
-
     // Dialogs / Track selectors
     var showAudioDialog by remember { mutableStateOf(false) }
     var showSubtitleDialog by remember { mutableStateOf(false) }
     var audioDefaultApplied by remember(activeUri, player) { mutableStateOf(false) }
     var subtitleDefaultApplied by remember(activeUri, player) { mutableStateOf(false) }
-
-    // Double tap seeking indicators
-    var showLeftSeekIndicator by remember { mutableStateOf(false) }
-    var showRightSeekIndicator by remember { mutableStateOf(false) }
 
     // Stats Panel
     var showStatsPanel by remember { mutableStateOf(false) }
@@ -258,8 +242,10 @@ fun PlayerScreen(
         }
     }
 
-    // Activity Timer Reset Helper
+    // Activity Timer Reset Helper. While a gesture is in progress the controls must stay hidden
+    // (VLC-style), so background callers (e.g. buffering) can't resurface the overlay mid-gesture.
     fun resetActivityTimer() {
+        if (gestureState.isGestureActive) return
         lastActivityTime = System.currentTimeMillis()
         showControls = true
     }
@@ -278,6 +264,7 @@ fun PlayerScreen(
         positionMs = pos
         player?.seekTo(pos)
         onSeekReported(pos, durationMs)
+        lastSilentSeekMs = System.currentTimeMillis()
     }
 
     LaunchedEffect(player, activeUri) {
@@ -292,11 +279,7 @@ fun PlayerScreen(
         playbackError = state.error
         showControls = true
         lastActivityTime = System.currentTimeMillis()
-        activeGestureType = null
-        showGestureOverlay = false
-        seekPreviewMs = null
-        showLeftSeekIndicator = false
-        showRightSeekIndicator = false
+        gestureState.reset()
         showAudioDialog = false
         showSubtitleDialog = false
         showStatsPanel = false
@@ -312,7 +295,13 @@ fun PlayerScreen(
         durationMs = runtimeState.durationMs
         bufferedPositionMs = runtimeState.bufferedPositionMs
         currentSpeed = runtimeState.speed
-        if (runtimeState.isPlaying != wasPlaying || runtimeState.isBuffering) {
+        // Wake the controls only when playback settles into a real pause — never while buffering,
+        // never on resume. A gesture seek causes pause→buffer→resume transitions (and double-tap
+        // seek doesn't even set isGestureActive), so those must not wake the controls. The grace
+        // window after a silent seek also covers the brief race before isBuffering flips true.
+        val settledPause = !runtimeState.isPlaying && wasPlaying && !runtimeState.isBuffering
+        val sinceSilentSeekMs = System.currentTimeMillis() - lastSilentSeekMs
+        if (settledPause && sinceSilentSeekMs > 1500) {
             resetActivityTimer()
         }
         if (runtimeState.ended && !hasReportedEnded) {
@@ -454,12 +443,12 @@ fun PlayerScreen(
         onSkipForward = {
             val newPos = (positionMs + 10000).coerceAtMost(durationMs)
             seekTo(newPos)
-            showRightSeekIndicator = true
+            gestureState.showRightSeekIndicator = true
         },
         onSkipBack = {
             val newPos = (positionMs - 10000).coerceAtLeast(0)
             seekTo(newPos)
-            showLeftSeekIndicator = true
+            gestureState.showLeftSeekIndicator = true
         },
         onCycleSpeed = {
             val currentIndex = speedOptions
@@ -561,205 +550,54 @@ fun PlayerScreen(
             onDispose { onDetachView() }
         }
 
-        // Tap HUD Gesture Overlay & Swipe Controls
+        // Tap / swipe gesture layer. Detection + the transient HUDs live in PlayerGestures.kt;
+        // player-owned actions are routed back through callbacks so the gesture layer never
+        // touches showControls directly (VLC-style decoupling).
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(player, activeUri) {
-                    // Slightly lower than the system touchSlop so vertical/horizontal swipes
-                    // are recognized sooner and feel more responsive (bigger effective hitbox).
-                    val gestureSlop = viewConfiguration.touchSlop * 0.6f
-                    var lastTapTime = 0L
-                    var lastTapPosition = Offset.Zero
-
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        val startTime = System.currentTimeMillis()
-                        val startPosition = down.position
-                        var isDrag = false
-                        var isDragRejected = false
-                        var dragGestureType: String? = null
-
-                        val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                        val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                        val initialVolume = if (maxVol > 0) currentVol.toFloat() / maxVol else 0f
-
-                        val curBright = activity?.window?.attributes?.screenBrightness ?: -1f
-                        val initialBrightness = if (curBright < 0f) {
-                            try {
-                                android.provider.Settings.System.getInt(
-                                    context.contentResolver,
-                                    android.provider.Settings.System.SCREEN_BRIGHTNESS
-                                ) / 255f
-                            } catch (e: Exception) {
-                                0.5f
-                            }
-                        } else {
-                            curBright
-                        }
-
-                        val screenWidth = size.width
-                        val screenHeight = size.height
-                        // Left half = brightness, right half = volume — indicators render on the
-                        // same side as the touch, like iOS's vertical volume/brightness bars.
-                        val isLeft = startPosition.x < screenWidth / 2f
-                        val verticalGestureType = if (isLeft) "brightness" else "volume"
-                        val seekStartPositionMs = positionMs
-
-                        val pointerId = down.id
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val dragPointer = event.changes.find { it.id == pointerId } ?: break
-
-                            if (dragPointer.pressed) {
-                                val currentPosition = dragPointer.position
-                                val diff = currentPosition - startPosition
-
-                                if (!isDrag && !isDragRejected) {
-                                    val distance = diff.getDistance()
-                                    if (distance > gestureSlop) {
-                                        isDrag = true
-                                        if (Math.abs(diff.y) > Math.abs(diff.x)) {
-                                            dragGestureType = verticalGestureType
-                                            activeGestureType = verticalGestureType
-                                        } else {
-                                            // VLC-style swipe-to-seek: drag horizontally anywhere
-                                            // to scrub, release to commit.
-                                            dragGestureType = "seek"
-                                            activeGestureType = "seek"
-                                            seekGestureStartMs = seekStartPositionMs
-                                            seekPreviewMs = seekStartPositionMs
-                                        }
-                                        showGestureOverlay = true
-                                    }
-                                }
-
-                                if (isDrag) {
-                                    dragPointer.consume()
-                                    when (dragGestureType) {
-                                        "brightness" -> {
-                                            val deltaPercent = -(currentPosition.y - startPosition.y) / screenHeight
-                                            val targetBrightness = (initialBrightness + deltaPercent).coerceIn(0f, 1f)
-                                            gestureBrightness = targetBrightness
-                                            activity?.let { act ->
-                                                val lp = act.window.attributes
-                                                lp.screenBrightness = targetBrightness
-                                                act.window.attributes = lp
-                                            }
-                                        }
-                                        "volume" -> {
-                                            val deltaPercent = -(currentPosition.y - startPosition.y) / screenHeight
-                                            val targetVolumePercent = (initialVolume + deltaPercent).coerceIn(0f, 1f)
-                                            gestureVolume = targetVolumePercent
-                                            val targetVol = (targetVolumePercent * maxVol).toInt().coerceIn(0, maxVol)
-                                            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
-                                        }
-                                        "seek" -> {
-                                            val deltaMs = ((currentPosition.x - startPosition.x) / screenWidth) * SEEK_GESTURE_RANGE_MS
-                                            seekPreviewMs = (seekStartPositionMs + deltaMs.toLong()).coerceIn(0L, durationMs)
-                                        }
-                                    }
-                                }
+                .playerGestures(
+                    state = gestureState,
+                    audioManager = audioManager,
+                    activity = activity,
+                    context = context,
+                    position = { positionMs },
+                    duration = { durationMs },
+                    onGestureStart = {
+                        // A drag started: drop the controls and cancel any pending tap toggle so a
+                        // quick flick can't later flash the overlay back on.
+                        singleTapJob?.cancel()
+                        singleTapJob = null
+                        showControls = false
+                    },
+                    onSingleTap = {
+                        singleTapJob?.cancel()
+                        singleTapJob = coroutineScope.launch {
+                            delay(250)
+                            if (showControls) {
+                                showControls = false
                             } else {
-                                dragPointer.consume()
-                                break
+                                resetActivityTimer()
                             }
+                            singleTapJob = null
                         }
-
-                        if (!isDrag) {
-                            val endTime = System.currentTimeMillis()
-                            val duration = endTime - startTime
-                            val distance = (lastTapPosition - startPosition).getDistance()
-
-                            if (duration < 300) {
-                                if (endTime - lastTapTime < 300 && distance < 100) {
-                                    // Double tap!
-                                    val isDoubleTapLeft = startPosition.x < screenWidth / 2f
-                                    if (isDoubleTapLeft) {
-                                        val newPos = (positionMs - 10000).coerceAtLeast(0)
-                                        seekToSilently(newPos)
-                                        showLeftSeekIndicator = true
-                                    } else {
-                                        val newPos = (positionMs + 10000).coerceAtMost(durationMs)
-                                        seekToSilently(newPos)
-                                        showRightSeekIndicator = true
-                                    }
-                                    lastTapTime = 0L
-                                } else {
-                                    // Single tap!
-                                    if (showControls) {
-                                        showControls = false
-                                    } else {
-                                        resetActivityTimer()
-                                    }
-                                    lastTapTime = endTime
-                                    lastTapPosition = startPosition
-                                }
-                            }
+                    },
+                    onDoubleTapSeek = { forward ->
+                        singleTapJob?.cancel()
+                        singleTapJob = null
+                        showControls = false
+                        val newPos = if (forward) {
+                            (positionMs + 10000).coerceAtMost(durationMs)
                         } else {
-                            if (dragGestureType == "seek") {
-                                seekPreviewMs?.let { seekToSilently(it) }
-                                seekPreviewMs = null
-                            }
-                            // Drag ended: indicator lingers briefly then hides (no fade animation).
-                            activeGestureType = null
+                            (positionMs - 10000).coerceAtLeast(0)
                         }
-                    }
-                }
+                        seekToSilently(newPos)
+                    },
+                    onSeekCommit = { seekToSilently(it) },
+                    key1 = player,
+                    key2 = activeUri,
+                )
         )
-
-        // Seek indicators LaunchedEffects
-        if (showLeftSeekIndicator) {
-            LaunchedEffect(Unit) {
-                delay(650)
-                showLeftSeekIndicator = false
-            }
-        }
-        if (showRightSeekIndicator) {
-            LaunchedEffect(Unit) {
-                delay(650)
-                showRightSeekIndicator = false
-            }
-        }
-
-        // Double tap feedback overlays — iOS/YouTube-style circular "10s" seek pointer, no animation
-        if (showLeftSeekIndicator) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 48.dp)
-                    .size(84.dp)
-                    .clip(CircleShape)
-                    .background(Color(0x66000000)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Replay10,
-                    contentDescription = "Rewind 10 seconds",
-                    tint = Color.White,
-                    modifier = Modifier.size(48.dp)
-                )
-            }
-        }
-
-        if (showRightSeekIndicator) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 48.dp)
-                    .size(84.dp)
-                    .clip(CircleShape)
-                    .background(Color(0x66000000)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Forward10,
-                    contentDescription = "Forward 10 seconds",
-                    tint = Color.White,
-                    modifier = Modifier.size(48.dp)
-                )
-            }
-        }
 
         // Playback error overlay — shown when the codec/source fails so it's visible instead
         // of an infinite buffering spinner, with a one-tap retry.
@@ -909,70 +747,11 @@ fun PlayerScreen(
             )
         }
 
-        // Volume — vertical bar on the left edge (same side you swipe), no animation.
-        if (showGestureOverlay && activeGestureType == "volume") {
-            VerticalGestureBar(
-                progress = gestureVolume,
-                icon = when {
-                    gestureVolume == 0f -> Icons.AutoMirrored.Outlined.VolumeMute
-                    gestureVolume < 0.5f -> Icons.AutoMirrored.Outlined.VolumeDown
-                    else -> Icons.AutoMirrored.Outlined.VolumeUp
-                },
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 24.dp),
-            )
-        }
-
-        // Brightness — vertical bar on the right edge, no animation.
-        if (showGestureOverlay && activeGestureType == "brightness") {
-            VerticalGestureBar(
-                progress = gestureBrightness,
-                icon = when {
-                    gestureBrightness < 0.3f -> Icons.Outlined.BrightnessLow
-                    gestureBrightness < 0.7f -> Icons.Outlined.BrightnessMedium
-                    else -> Icons.Outlined.BrightnessHigh
-                },
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 24.dp),
-            )
-        }
-
-        // VLC-style swipe-to-seek preview — centered, no animation.
-        if (showGestureOverlay && activeGestureType == "seek" && seekPreviewMs != null) {
-            val previewMs = seekPreviewMs!!
-            val deltaMs = previewMs - seekGestureStartMs
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xCC101018))
-                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 20.dp, vertical = 14.dp)
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(
-                        imageVector = if (deltaMs >= 0) Icons.Outlined.FastForward else Icons.Outlined.FastRewind,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp),
-                    )
-                    Text(
-                        text = formatTime(previewMs),
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = (if (deltaMs >= 0) "+" else "-") + formatTime(kotlin.math.abs(deltaMs)),
-                        color = Color(0xFFC084FC),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-            }
-        }
+        // Transient gesture HUDs — volume/brightness bar, swipe-seek preview, double-tap indicators.
+        PlayerGestureOverlays(
+            state = gestureState,
+            modifier = Modifier.fillMaxSize(),
+        )
 
         when (globalUiStyle) {
             "modern" -> {
@@ -1081,56 +860,6 @@ fun PlayerScreen(
                 )
             },
             onDismiss = { showSubtitleDialog = false }
-        )
-    }
-}
-
-/** iOS-style vertical fill bar for the volume/brightness swipe gesture (shown on the swiped side). */
-@Composable
-private fun VerticalGestureBar(
-    progress: Float,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .width(46.dp)
-            .height(160.dp)
-            .clip(RoundedCornerShape(23.dp))
-            .background(Color(0xCC101018))
-            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(23.dp))
-            .padding(vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(18.dp),
-        )
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .width(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(Color(0x33FFFFFF)),
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(progress.coerceIn(0f, 1f))
-                    .background(
-                        Brush.verticalGradient(colors = listOf(Color(0xFF9E8CFE), AccentPurple))
-                    )
-            )
-        }
-        Text(
-            text = "${(progress * 100).toInt()}",
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
         )
     }
 }
@@ -1778,19 +1507,6 @@ fun TrackRow(
                     .size(18.dp)
             )
         }
-    }
-}
-
-// Time Formatting Helper
-private fun formatTime(ms: Long): String {
-    val totalSecs = ms / 1000
-    val hours = totalSecs / 3600
-    val mins = (totalSecs % 3600) / 60
-    val secs = totalSecs % 60
-    return if (hours > 0) {
-        String.format("%02d:%02d:%02d", hours, mins, secs)
-    } else {
-        String.format("%02d:%02d", mins, secs)
     }
 }
 

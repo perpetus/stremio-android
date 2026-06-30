@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,6 +34,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -191,7 +193,24 @@ fun StreamsSheet(
                 val filteredEpisodes = state.episodes.filter {
                     state.selectedSeason == null || it.season == state.selectedSeason
                 }
+                val listState = rememberLazyListState()
+                val targetIndex = remember(filteredEpisodes) {
+                    val currentIndex = filteredEpisodes.indexOfFirst { it.isCurrent }
+                    if (currentIndex != -1) {
+                        currentIndex
+                    } else {
+                        filteredEpisodes.indexOfLast { it.watched }
+                    }
+                }
+                LaunchedEffect(targetIndex) {
+                    if (targetIndex != -1) {
+                        listState.scrollToItem(targetIndex)
+                    } else {
+                        listState.scrollToItem(0)
+                    }
+                }
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier

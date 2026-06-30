@@ -244,6 +244,13 @@ fun StremioMobileApp(viewModel: MainViewModel) {
             }
 
             if (streamsState.isOpen) {
+                BackHandler {
+                    if (streamsState.isSeries && streamsState.selectedVideoId != null) {
+                        viewModel.backToEpisodes()
+                    } else {
+                        viewModel.closeStreams()
+                    }
+                }
                 StreamsSheet(
                     state = streamsState,
                     preferredQuality = state.preferredQuality,
