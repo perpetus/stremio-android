@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -203,7 +204,7 @@ fun PosterTile(
                     CinemaBadge(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 12.dp),
+                            .padding(top = 8.dp),
                     )
                 }
             }
@@ -284,20 +285,42 @@ private fun AddBadge(
     text: String,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Box(
         modifier = modifier
-            .height(17.dp)
-            .clip(RoundedCornerShape(3.dp))
-            .background(Color(0xDDEFEAFF))
-            .padding(horizontal = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = text,
-            color = AccentPurple,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-        )
+        // Bottom stacked card
+        Box(
+            modifier = Modifier
+                .offset(x = (-2).dp, y = 2.dp)
+                .height(17.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Color(0xFFC0B5FA)) // slightly darker/saturated lavender card for stack effect
+                .padding(horizontal = 5.dp)
+        ) {
+            Text(
+                text = text,
+                color = Color.Transparent,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+
+        // Top foreground card
+        Row(
+            modifier = Modifier
+                .height(17.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Color(0xDDEFEAFF))
+                .padding(horizontal = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = text,
+                color = AccentPurple,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 
@@ -305,18 +328,17 @@ private fun AddBadge(
 private fun CinemaBadge(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
-            .height(18.dp)
             .clip(RoundedCornerShape(4.dp))
             .background(Color(0xCC202631))
-            .padding(horizontal = 7.dp),
+            .padding(horizontal = 6.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(
             imageVector = Icons.Outlined.Movie,
             contentDescription = null,
             tint = Color(0xFFC9C8D8),
-            modifier = Modifier.size(9.dp),
+            modifier = Modifier.size(10.dp),
         )
         Text(
             text = "IN CINEMA",

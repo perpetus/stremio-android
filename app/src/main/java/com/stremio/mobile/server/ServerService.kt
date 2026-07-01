@@ -30,6 +30,8 @@ class ServerService : Service() {
                 .build()
 
             ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundServiceType())
+        } else {
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         }
         return START_STICKY
     }

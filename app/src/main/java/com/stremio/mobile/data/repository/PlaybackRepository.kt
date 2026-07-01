@@ -55,6 +55,7 @@ class PlaybackRepository(
         }
         val preferredLang = runCatching { core.getSubtitleSettings().language }.getOrNull()
         val startPositionMs = runCatching { core.getResumePositionMs(option.core.streamRequest) }.getOrDefault(0L)
+        val settings = runCatching { core.getCtx().profile.settings }.getOrNull()
 
         playbackManager.load(
             uri = Uri.parse(url),
@@ -63,6 +64,7 @@ class PlaybackRepository(
             subtitles = subtitles,
             preferredSubtitleLang = preferredLang,
             engine = engine,
+            settings = settings,
         )
         return true
     }

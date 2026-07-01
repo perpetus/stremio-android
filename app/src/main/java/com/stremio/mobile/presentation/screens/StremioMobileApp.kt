@@ -158,6 +158,7 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                     onResetLiquidGlassTuning = viewModel::resetLiquidGlassTuning,
                     onSetSelectedFont = viewModel::setSelectedFont,
                     onSetAnalyticsEnabled = viewModel::setAnalyticsEnabled,
+                    onShowAnalyticsDisclosure = viewModel::showAnalyticsDisclosure,
                     onSetAutoUpdateEnabled = viewModel::setAutoUpdateEnabled,
                     onCheckForUpdates = { viewModel.checkForUpdates(manual = true) },
                     onDownloadAndInstallUpdate = viewModel::downloadAndInstallUpdate,
@@ -271,6 +272,7 @@ fun StremioMobileApp(viewModel: MainViewModel) {
             }
 
             if (state.showMobileDataWarning) {
+                var disableWarning by remember { mutableStateOf(false) }
                 androidx.compose.material3.AlertDialog(
                     onDismissRequest = viewModel::cancelMobileDataPlayback,
                     title = {
@@ -282,15 +284,47 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                         )
                     },
                     text = {
-                        Text(
-                            text = "You are currently connected to mobile data. Streaming video may consume a significant amount of data. Do you want to continue?",
-                            color = MutedText,
-                            fontSize = 14.sp
-                        )
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "You are currently connected to mobile data. Streaming video may consume a significant amount of data. Do you want to continue?",
+                                color = MutedText,
+                                fontSize = 14.sp
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { disableWarning = !disableWarning },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                androidx.compose.material3.Checkbox(
+                                    checked = disableWarning,
+                                    onCheckedChange = { disableWarning = it },
+                                    colors = androidx.compose.material3.CheckboxDefaults.colors(
+                                        checkedColor = AccentPurple,
+                                        uncheckedColor = MutedText,
+                                        checkmarkColor = Color.White,
+                                    ),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Don't show this warning again",
+                                    color = Color.White,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
                     },
                     confirmButton = {
                         androidx.compose.material3.TextButton(
-                            onClick = viewModel::confirmMobileDataPlayback
+                            onClick = {
+                                if (disableWarning) {
+                                    viewModel.setMobileDataWarning(false)
+                                }
+                                viewModel.confirmMobileDataPlayback()
+                            }
                         ) {
                             Text(text = "Stream Anyway", color = AccentPurple, fontWeight = FontWeight.Bold)
                         }
@@ -302,7 +336,7 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                             Text(text = "Cancel", color = MutedText)
                         }
                     },
-                    containerColor = GlassSurface,
+                    containerColor = Color(0xFF2A2935),
                     shape = RoundedCornerShape(20.dp),
                 )
             }
@@ -471,6 +505,7 @@ private fun BoardScreen(
     onResetLiquidGlassTuning: () -> Unit,
     onSetSelectedFont: (AppFont) -> Unit,
     onSetAnalyticsEnabled: (Boolean) -> Unit,
+    onShowAnalyticsDisclosure: () -> Unit,
     onSetAutoUpdateEnabled: (Boolean) -> Unit,
     onCheckForUpdates: () -> Unit,
     onDownloadAndInstallUpdate: (UpdateInfo) -> Unit,
@@ -775,7 +810,6 @@ private fun BoardScreen(
                                 InterfaceSettingsScreen(
                                     settings = state.profileSettings,
                                     globalUiStyle = state.globalUiStyle,
-                                    playerUiStyle = state.playerUiStyle,
                                     glassEffectsMode = state.glassEffectsMode,
                                     globalGlassAlpha = state.globalGlassAlpha,
                                     adaptiveGlassContrast = state.adaptiveGlassContrast,
@@ -784,13 +818,13 @@ private fun BoardScreen(
                                     selectedFont = state.selectedFont,
                                     onUpdateSettings = onUpdateProfileSettings,
                                     onSetGlobalUiStyle = onSetGlobalUiStyle,
-                                    onSetPlayerUiStyle = onSetPlayerUiStyle,
                                     onSetGlassEffectsMode = onSetGlassEffectsMode,
                                     onSetGlobalGlassAlpha = onSetGlobalGlassAlpha,
                                     onSetAdaptiveGlassContrastEnabled = onSetAdaptiveGlassContrastEnabled,
                                     onSetGlassHapticsEnabled = onSetGlassHapticsEnabled,
                                     onSetHapticsIntensity = onSetHapticsIntensity,
                                     onSetSelectedFont = onSetSelectedFont,
+                                    onNavigateToLiquidGlassLab = { settingsSubScreen = SettingsSubScreen.LiquidGlassLab },
                                     onBack = { settingsSubScreen = SettingsSubScreen.Main }
                                 )
                             }
@@ -799,6 +833,8 @@ private fun BoardScreen(
                             item {
                                 PlayerSettingsScreen(
                                     settings = state.profileSettings,
+                                    playerUiStyle = state.playerUiStyle,
+                                    onSetPlayerUiStyle = onSetPlayerUiStyle,
                                     onUpdateSettings = onUpdateProfileSettings,
                                     onBack = { settingsSubScreen = SettingsSubScreen.Main }
                                 )
@@ -808,17 +844,12 @@ private fun BoardScreen(
                             item {
                                 StreamingSettingsScreen(
                                     serverState = state.server,
-                                    serverPingStatus = state.serverPingStatus,
-                                    isPingLoading = state.isPingLoading,
                                     serverSettings = state.serverSettings,
                                     isSeedingEnabled = state.isSeedingEnabled,
                                     minSeedsThreshold = state.minSeedsThreshold,
                                     minDownloadSpeedBps = state.minDownloadSpeedBps,
                                     preferredQuality = state.preferredQuality,
                                     isAutoSwitchOnDeadStream = state.isAutoSwitchOnDeadStream,
-                                    onStartServer = onStartServer,
-                                    onStopServer = onStopServer,
-                                    onCheckServer = onCheckServer,
                                     onUpdateServerSettings = onUpdateServerSettings,
                                     onSetSeedingEnabled = onSetSeedingEnabled,
                                     onSetMinSeedsThreshold = onSetMinSeedsThreshold,
@@ -842,6 +873,7 @@ private fun BoardScreen(
                                     onSetKeepScreenOn = onSetKeepScreenOn,
                                     isAnalyticsEnabled = state.isAnalyticsEnabled,
                                     onSetAnalyticsEnabled = onSetAnalyticsEnabled,
+                                    onShowAnalyticsDisclosure = onShowAnalyticsDisclosure,
                                     onBack = { settingsSubScreen = SettingsSubScreen.Main }
                                 )
                             }
@@ -858,7 +890,7 @@ private fun BoardScreen(
                                     onSetGlobalGlassAlpha = onSetGlobalGlassAlpha,
                                     onSetLiquidGlassTuning = onSetLiquidGlassTuning,
                                     onResetLiquidGlassTuning = onResetLiquidGlassTuning,
-                                    onBack = { settingsSubScreen = SettingsSubScreen.Main }
+                                    onBack = { settingsSubScreen = SettingsSubScreen.Interface }
                                 )
                             }
                         }

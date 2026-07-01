@@ -23,6 +23,7 @@ fun AndroidSettingsScreen(
     onSetKeepScreenOn: (Boolean) -> Unit,
     isAnalyticsEnabled: Boolean,
     onSetAnalyticsEnabled: (Boolean) -> Unit,
+    onShowAnalyticsDisclosure: () -> Unit,
     onBack: () -> Unit
 ) {
     Column(
@@ -88,6 +89,12 @@ fun AndroidSettingsScreen(
             checked = isAnalyticsEnabled,
             onCheckedChange = onSetAnalyticsEnabled,
             description = "Help improve the app by sharing anonymous crash reports and usage statistics"
+        )
+
+        SettingsClickRow(
+            title = "Privacy & Analytics Disclosure",
+            onClick = onShowAnalyticsDisclosure,
+            description = "Read disclosure about how anonymous crash reports and usage statistics are processed"
         )
     }
 }

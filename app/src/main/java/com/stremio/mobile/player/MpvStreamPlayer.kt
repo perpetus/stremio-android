@@ -17,7 +17,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-class MpvStreamPlayer(context: Context) : Player {
+class MpvStreamPlayer(
+    context: Context,
+    private val settings: com.stremio.core.types.profile.Profile.Settings? = null
+) : Player {
     override val engine: PlayerEngine = PlayerEngine.MPV
 
     private val appContext = context.applicationContext
@@ -108,6 +111,7 @@ class MpvStreamPlayer(context: Context) : Player {
         copyMpvAssets(appContext)
         return StremioMpvView(
             context = context,
+            settings = settings,
             onSurfaceReady = {
                 surfaceReady = true
                 applyResizeMode()
@@ -134,6 +138,7 @@ class MpvStreamPlayer(context: Context) : Player {
         startPositionMs: Long,
         subtitles: List<ExternalSubtitle>,
         preferredSubtitleLang: String?,
+        settings: com.stremio.core.types.profile.Profile.Settings?,
     ) {
         currentUri = uri
         currentStartPositionMs = startPositionMs
@@ -315,6 +320,10 @@ class MpvStreamPlayer(context: Context) : Player {
         val subtitleTracks = parsedSubtitleTracks.map { enrichSubtitleTrack(it) }
         val sid = runCatching { MPVLib.getPropertyString("sid") }.getOrNull()
 
+        val width = runCatching { MPVLib.getPropertyInt("width") }.getOrNull() ?: 0
+        val height = runCatching { MPVLib.getPropertyInt("height") }.getOrNull() ?: 0
+        val fps = runCatching { MPVLib.getPropertyDouble("container-fps") }.getOrNull()?.toFloat() ?: 0f
+
         mutableRuntimeState.value = PlayerRuntimeState(
             isPlaying = !paused && !buffering && error == null && !ended,
             isBuffering = buffering || (!fileLoaded && error == null && !ended),
@@ -327,6 +336,9 @@ class MpvStreamPlayer(context: Context) : Player {
             subtitlesDisabled = sid == "no" || subtitleTracks.none { it.selected },
             error = error,
             ended = ended,
+            videoWidth = width,
+            videoHeight = height,
+            videoFrameRate = fps,
         )
     }
 
@@ -348,9 +360,9 @@ class MpvStreamPlayer(context: Context) : Player {
             exclusive = external.exclusive,
         )
     }
-
     private class StremioMpvView(
         context: Context,
+        private val settings: com.stremio.core.types.profile.Profile.Settings?,
         private val onSurfaceReady: () -> Unit,
         private val onSurfaceDestroyed: () -> Unit,
     ) : BaseMPVView(context, null) {
@@ -359,8 +371,29 @@ class MpvStreamPlayer(context: Context) : Player {
             MPVLib.setOptionString("profile", "fast")
             MPVLib.setOptionString("gpu-context", "android")
             MPVLib.setOptionString("opengl-es", "yes")
-            MPVLib.setOptionString("hwdec", "mediacodec,mediacodec-copy")
-            MPVLib.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1")
+
+            val hardwareDecoding = settings?.hardwareDecoding ?: true
+            if (hardwareDecoding) {
+                MPVLib.setOptionString("hwdec", "mediacodec,mediacodec-copy")
+                MPVLib.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1")
+            } else {
+                MPVLib.setOptionString("hwdec", "no")
+            }
+
+            val audioPassthrough = settings?.audioPassthrough ?: false
+            if (audioPassthrough) {
+                MPVLib.setOptionString("audio-spdif", "ac3,dts,eac3,truehd,dts-hd")
+            } else {
+                MPVLib.setOptionString("audio-spdif", "")
+            }
+
+            val surroundSound = settings?.surroundSound ?: false
+            if (surroundSound) {
+                MPVLib.setOptionString("audio-channels", "auto-safe")
+            } else {
+                MPVLib.setOptionString("audio-channels", "stereo")
+            }
+
             MPVLib.setOptionString("ao", "audiotrack,opensles")
             MPVLib.setOptionString("audio-set-media-role", "yes")
             MPVLib.setOptionString("tls-verify", "yes")

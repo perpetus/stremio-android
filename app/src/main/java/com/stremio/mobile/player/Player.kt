@@ -72,7 +72,6 @@ data class PlayerSubtitleStyle(
     val outlineColor: String = "#000000",
     val assStyling: Boolean = true,
 )
-
 data class PlayerRuntimeState(
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
@@ -85,6 +84,9 @@ data class PlayerRuntimeState(
     val subtitlesDisabled: Boolean = true,
     val error: String? = null,
     val ended: Boolean = false,
+    val videoWidth: Int = 0,
+    val videoHeight: Int = 0,
+    val videoFrameRate: Float = 0f,
 )
 
 interface Player {
@@ -97,6 +99,7 @@ interface Player {
         startPositionMs: Long = 0,
         subtitles: List<ExternalSubtitle> = emptyList(),
         preferredSubtitleLang: String? = null,
+        settings: com.stremio.core.types.profile.Profile.Settings? = null,
     )
     fun retry()
     fun play()

@@ -101,7 +101,7 @@ class MainViewModel(
     private val isMobileDataWarning = MutableStateFlow(authRepository.isMobileDataWarning())
     private val isKeepScreenOn = MutableStateFlow(authRepository.isKeepScreenOn())
     private val isAnalyticsEnabled = MutableStateFlow(authRepository.isAnalyticsEnabled())
-    private val showAnalyticsDisclosure = MutableStateFlow(!authRepository.isAnalyticsDisclosureAcknowledged())
+    private val showAnalyticsDisclosure = MutableStateFlow(false)
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState
     private val isAutoUpdateEnabled = MutableStateFlow(authRepository.isAutoUpdateEnabled())
@@ -293,6 +293,8 @@ class MainViewModel(
         restoreCoreSession()
         maybeAutoCheckForUpdates()
 
+        startServer() // Always start the streaming server on app startup
+
         viewModelScope.launch {
             while (true) {
                 delay(60_000L)
@@ -365,14 +367,7 @@ class MainViewModel(
     }
 
     private suspend fun stopServerIfIdle() {
-        val now = System.currentTimeMillis()
-        val isPlayerActive = playerOpen.value
-        val seeding = isSeedingEnabled.value
-        val isStopped = serverController.state.value is StreamingServerState.Stopped
-
-        if (!isPlayerActive && !seeding && (now - lastServerActivityMs) >= IDLE_TIMEOUT_MS && !isStopped) {
-            serverController.stop()
-        }
+        // No-op: Server should run continuously as long as the app is running
     }
 
     fun fetchStreamingServerSettingsDirectly() {
@@ -500,8 +495,20 @@ class MainViewModel(
 
     fun isServerInForeground(): Boolean = authRepository.isServerInForeground()
     fun setServerInForeground(enabled: Boolean) {
-        authRepository.setServerInForeground(enabled)
-        isServerInForeground.value = enabled
+        val current = authRepository.isServerInForeground()
+        if (current != enabled) {
+            authRepository.setServerInForeground(enabled)
+            isServerInForeground.value = enabled
+            
+            val packageManager = appContext.packageManager
+            val intent = packageManager.getLaunchIntentForPackage(appContext.packageName)
+            if (intent != null) {
+                val componentName = intent.component
+                val mainIntent = Intent.makeRestartActivityTask(componentName)
+                appContext.startActivity(mainIntent)
+                Runtime.getRuntime().exit(0)
+            }
+        }
     }
 
     fun isMobileDataWarning(): Boolean = authRepository.isMobileDataWarning()
@@ -631,6 +638,10 @@ class MainViewModel(
         authRepository.setAnalyticsDisclosureAcknowledged(true)
         showAnalyticsDisclosure.value = false
         setAnalyticsEnabled(enableAnalytics)
+    }
+
+    fun showAnalyticsDisclosure() {
+        showAnalyticsDisclosure.value = true
     }
 
     fun setMinSeedsThreshold(value: Int) {
@@ -1290,6 +1301,7 @@ class MainViewModel(
     /** Polls live torrent health for a torrent stream and surfaces a fallback when it's dead/too slow. */
     private fun startHealthWatch(option: StreamOption) {
         noSeedsPollJob?.cancel()
+        unhealthySinceMs = null
         val source = option.core.stream.source
         if (source !is com.stremio.core.types.resource.Stream.Source.Tramvai) return
         val infoHash = source.value.infoHash
@@ -1301,7 +1313,7 @@ class MainViewModel(
                 // Local JNI/HTTP roundtrip to the on-device streaming server; comfortably finishes well under this.
                 delay(800)
                 val stats = playbackRepository.getStreamStatistics()
-                if (stats != null) {
+                if (stats != null && stats.infoHash == infoHash) {
                     val tooFewSeeds = stats.peers < minSeedsThreshold.value
                     val tooSlow = minDownloadSpeedBps.value > 0 && stats.downloadSpeed < minDownloadSpeedBps.value
                     val isNearComplete = stats.streamProgress >= 0.95

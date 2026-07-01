@@ -29,7 +29,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-class ExoStreamPlayer(context: Context) : Player {
+class ExoStreamPlayer(
+    context: Context,
+    private val settings: com.stremio.core.types.profile.Profile.Settings? = null
+) : Player {
     override val engine: PlayerEngine = PlayerEngine.EXO
 
     private val appContext = context.applicationContext
@@ -46,8 +49,52 @@ class ExoStreamPlayer(context: Context) : Player {
         val dataSourceFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(appContext)
             .setDataSourceFactory(dataSourceFactory)
-        val renderersFactory = DefaultRenderersFactory(appContext)
-            .setEnableDecoderFallback(true)
+
+        val hardwareDecoding = settings?.hardwareDecoding ?: true
+        val renderersFactory = object : DefaultRenderersFactory(appContext) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): androidx.media3.exoplayer.audio.AudioSink {
+                val audioPassthrough = settings?.audioPassthrough ?: false
+                val surroundSound = settings?.surroundSound ?: false
+                val audioCapabilities = if (!audioPassthrough || !surroundSound) {
+                    val encodings = if (audioPassthrough) {
+                        intArrayOf(
+                            android.media.AudioFormat.ENCODING_PCM_16BIT,
+                            android.media.AudioFormat.ENCODING_AC3,
+                            android.media.AudioFormat.ENCODING_E_AC3,
+                            android.media.AudioFormat.ENCODING_DTS,
+                            android.media.AudioFormat.ENCODING_DTS_HD
+                        )
+                    } else {
+                        intArrayOf(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                    }
+                    val maxChannels = if (surroundSound) 8 else 2
+                    androidx.media3.exoplayer.audio.AudioCapabilities(encodings, maxChannels)
+                } else {
+                    androidx.media3.exoplayer.audio.AudioCapabilities.getCapabilities(context)
+                }
+                return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                    .setAudioCapabilities(audioCapabilities)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .build()
+            }
+        }.setEnableDecoderFallback(true)
+
+        if (!hardwareDecoding) {
+            renderersFactory.setMediaCodecSelector { mimeType, requiresSecure, requiresTunneling ->
+                val decoders = androidx.media3.exoplayer.mediacodec.MediaCodecSelector.DEFAULT
+                    .getDecoderInfos(mimeType, requiresSecure, requiresTunneling)
+                decoders.filter { info ->
+                    val name = info.name.lowercase()
+                    name.startsWith("omx.google.") || name.startsWith("c2.android.") || name.contains(".sw.") || name.endsWith(".sw")
+                }
+            }
+        }
+
         ExoPlayer.Builder(appContext)
             .setMediaSourceFactory(mediaSourceFactory)
             .setRenderersFactory(renderersFactory)
@@ -110,6 +157,7 @@ class ExoStreamPlayer(context: Context) : Player {
         startPositionMs: Long,
         subtitles: List<ExternalSubtitle>,
         preferredSubtitleLang: String?,
+        settings: com.stremio.core.types.profile.Profile.Settings?,
     ) {
         currentUri = uri
         currentStartPositionMs = startPositionMs
@@ -230,7 +278,7 @@ class ExoStreamPlayer(context: Context) : Player {
         playerView?.subtitleView?.let { subView ->
             val style = currentSubtitleStyle
             subView.setApplyEmbeddedFontSizes(false)
-            subView.setApplyEmbeddedStyles(style.assStyling)
+            subView.setApplyEmbeddedStyles(false)
             subView.setFractionalTextSize(0.0533f * (style.sizePercent / 100f))
 
             val textColor = parseSubtitleColor(style.textColor, Color.WHITE)
@@ -320,6 +368,11 @@ class ExoStreamPlayer(context: Context) : Player {
         error: String? = mutableRuntimeState.value.error,
         ended: Boolean = exoPlayer.playbackState == androidx.media3.common.Player.STATE_ENDED,
     ) {
+        val videoFormat = exoPlayer.videoFormat
+        val videoWidth = videoFormat?.width ?: 0
+        val videoHeight = videoFormat?.height ?: 0
+        val videoFrameRate = videoFormat?.frameRate ?: 0f
+
         mutableRuntimeState.value = PlayerRuntimeState(
             isPlaying = exoPlayer.isPlaying,
             isBuffering = exoPlayer.playbackState == androidx.media3.common.Player.STATE_BUFFERING,
@@ -332,6 +385,9 @@ class ExoStreamPlayer(context: Context) : Player {
             subtitlesDisabled = exoPlayer.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT),
             error = error,
             ended = ended,
+            videoWidth = videoWidth,
+            videoHeight = videoHeight,
+            videoFrameRate = videoFrameRate,
         )
     }
 

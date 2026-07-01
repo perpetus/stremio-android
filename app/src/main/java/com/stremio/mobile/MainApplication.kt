@@ -77,7 +77,7 @@ class MainApplication : Application(), SingletonImageLoader.Factory {
             ).apply {
                 captureApplicationLifecycleEvents = true
                 captureScreenViews = true
-                sessionReplay = true
+                sessionReplay = false
                 sessionReplayConfig.maskAllTextInputs = true
                 sessionReplayConfig.maskAllImages = true
                 optOut = !analyticsEnabled

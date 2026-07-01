@@ -26,18 +26,19 @@ class PlaybackManager(
         subtitles: List<ExternalSubtitle> = emptyList(),
         preferredSubtitleLang: String? = null,
         engine: PlayerEngine = PlayerEngine.EXO,
+        settings: com.stremio.core.types.profile.Profile.Settings? = null,
     ) {
         player?.release()
         val fallbackMessage = if (engine == PlayerEngine.MPV) "MPV unavailable; using ExoPlayer." else null
         player = runCatching {
-            PlayerFactory.create(context, engine).also {
-                it.load(uri, startPositionMs, subtitles, preferredSubtitleLang)
+            PlayerFactory.create(context, engine, settings).also {
+                it.load(uri, startPositionMs, subtitles, preferredSubtitleLang, settings)
                 it.play()
             }
         }.getOrElse { failure ->
             if (engine != PlayerEngine.MPV) throw failure
-            ExoStreamPlayer(context).also {
-                it.load(uri, startPositionMs, subtitles, preferredSubtitleLang)
+            ExoStreamPlayer(context, settings).also {
+                it.load(uri, startPositionMs, subtitles, preferredSubtitleLang, settings)
                 it.play()
                 it.reportNonFatalError(fallbackMessage)
             }

@@ -1,5 +1,6 @@
 package com.stremio.mobile.presentation.screens
 
+import android.os.Build
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -323,10 +324,11 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(player, activeUri, runtimeState.subtitleTracks, profileSettings?.subtitlesLanguage) {
+    LaunchedEffect(player, activeUri, runtimeState.subtitleTracks, profileSettings?.subtitlesLanguage, profileSettings?.subtitlesAutoSelect) {
         if (player == null || subtitleDefaultApplied) return@LaunchedEffect
         val settingsLanguage = profileSettings?.subtitlesLanguage
-        if (settingsLanguage == null) {
+        val autoSelect = profileSettings?.subtitlesAutoSelect ?: true
+        if (settingsLanguage == null || !autoSelect) {
             player.disableSubtitles()
             subtitleDefaultApplied = true
             return@LaunchedEffect
@@ -361,6 +363,22 @@ fun PlayerScreen(
         player?.setSubtitleStyle(subtitleStyle)
     }
 
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, player, profileSettings?.playInBackground) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+                val playBg = profileSettings?.playInBackground ?: false
+                if (!playBg) {
+                    player?.pause()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     // Continuous Position Tracker
     LaunchedEffect(player, isPlaying) {
         if (player == null || !isPlaying) return@LaunchedEffect
@@ -384,10 +402,97 @@ fun PlayerScreen(
         }
     }
 
+    // Frame Rate Matching
+    LaunchedEffect(
+        activity,
+        runtimeState.videoWidth,
+        runtimeState.videoHeight,
+        runtimeState.videoFrameRate,
+        profileSettings?.frameRateMatchingStrategy
+    ) {
+        val currentActivity = activity ?: return@LaunchedEffect
+        val strategy = profileSettings?.frameRateMatchingStrategy ?: com.stremio.core.types.profile.Profile.FrameRateMatchingStrategy.DISABLED
+        if (strategy == com.stremio.core.types.profile.Profile.FrameRateMatchingStrategy.DISABLED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                currentActivity.window?.let { window ->
+                    window.attributes = window.attributes.apply {
+                        preferredDisplayModeId = 0
+                    }
+                }
+            }
+            return@LaunchedEffect
+        }
+
+        val videoWidth = runtimeState.videoWidth
+        val videoHeight = runtimeState.videoHeight
+        val videoFps = runtimeState.videoFrameRate
+        if (videoWidth <= 0 || videoHeight <= 0 || videoFps <= 0f) return@LaunchedEffect
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                runCatching { currentActivity.display }.getOrNull()
+            } else {
+                @Suppress("DEPRECATION")
+                currentActivity.windowManager?.defaultDisplay
+            } ?: return@LaunchedEffect
+
+            val supportedModes = display.supportedModes ?: return@LaunchedEffect
+            val activeMode = display.mode ?: return@LaunchedEffect
+
+            var bestMode: android.view.Display.Mode? = null
+            var minFpsDiff = Float.MAX_VALUE
+            var bestResolutionMatch = false
+
+            for (mode in supportedModes) {
+                val modeFps = mode.refreshRate
+                val fpsDiff = kotlin.math.abs(modeFps - videoFps)
+                val normalizedDiff = if (fpsDiff < 0.1f) 0f else fpsDiff
+                
+                val widthMatches = mode.physicalWidth == videoWidth
+                val heightMatches = mode.physicalHeight == videoHeight
+                val resolutionMatches = widthMatches && heightMatches
+
+                if (strategy == com.stremio.core.types.profile.Profile.FrameRateMatchingStrategy.FRAME_RATE_AND_RESOLUTION) {
+                    if (resolutionMatches) {
+                        if (normalizedDiff < minFpsDiff) {
+                            minFpsDiff = normalizedDiff
+                            bestMode = mode
+                            bestResolutionMatch = true
+                        }
+                    } else if (!bestResolutionMatch) {
+                        if (normalizedDiff < minFpsDiff) {
+                            minFpsDiff = normalizedDiff
+                            bestMode = mode
+                        }
+                    }
+                } else if (strategy == com.stremio.core.types.profile.Profile.FrameRateMatchingStrategy.FRAME_RATE_ONLY) {
+                    val currentResolutionMatches = mode.physicalWidth == activeMode.physicalWidth && 
+                                                   mode.physicalHeight == activeMode.physicalHeight
+                    if (currentResolutionMatches) {
+                        if (normalizedDiff < minFpsDiff) {
+                            minFpsDiff = normalizedDiff
+                            bestMode = mode
+                        }
+                    }
+                }
+            }
+
+            bestMode?.let { matchedMode ->
+                if (matchedMode.modeId != activeMode.modeId) {
+                    currentActivity.window?.let { window ->
+                        window.attributes = window.attributes.apply {
+                            preferredDisplayModeId = matchedMode.modeId
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Live Torrent Stats Polling
     LaunchedEffect(infoHash, showStatsPanel) {
+        torrentStats = null
         if (infoHash == null || !showStatsPanel) {
-            torrentStats = null
             return@LaunchedEffect
         }
         while (true) {
@@ -396,6 +501,8 @@ fun PlayerScreen(
             }
             if (statsStr != null) {
                 torrentStats = try { JSONObject(statsStr) } catch (e: Exception) { null }
+            } else {
+                torrentStats = null
             }
             delay(2000)
         }
@@ -441,12 +548,14 @@ fun PlayerScreen(
         },
         onSeekTo = { seekTo(it) },
         onSkipForward = {
-            val newPos = (positionMs + 10000).coerceAtMost(durationMs)
+            val seekDur = profileSettings?.seekTimeDuration ?: 10000L
+            val newPos = (positionMs + seekDur).coerceAtMost(durationMs)
             seekTo(newPos)
             gestureState.showRightSeekIndicator = true
         },
         onSkipBack = {
-            val newPos = (positionMs - 10000).coerceAtLeast(0)
+            val seekDur = profileSettings?.seekTimeDuration ?: 10000L
+            val newPos = (positionMs - seekDur).coerceAtLeast(0)
             seekTo(newPos)
             gestureState.showLeftSeekIndicator = true
         },
@@ -586,10 +695,11 @@ fun PlayerScreen(
                         singleTapJob?.cancel()
                         singleTapJob = null
                         showControls = false
+                        val seekDur = profileSettings?.seekTimeDuration ?: 10000L
                         val newPos = if (forward) {
-                            (positionMs + 10000).coerceAtMost(durationMs)
+                            (positionMs + seekDur).coerceAtMost(durationMs)
                         } else {
-                            (positionMs - 10000).coerceAtLeast(0)
+                            (positionMs - seekDur).coerceAtLeast(0)
                         }
                         seekToSilently(newPos)
                     },

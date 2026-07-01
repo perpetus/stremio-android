@@ -75,7 +75,7 @@ class AuthRepository(
 
     fun isServerInForeground(): Boolean = preferences.getBoolean("server_in_foreground", true)
     fun setServerInForeground(enabled: Boolean) {
-        preferences.edit().putBoolean("server_in_foreground", enabled).apply()
+        preferences.edit().putBoolean("server_in_foreground", enabled).commit()
     }
 
     fun isMobileDataWarning(): Boolean = preferences.getBoolean("mobile_data_warning", true)

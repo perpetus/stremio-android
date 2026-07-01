@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -158,12 +159,7 @@ fun SettingsPanel(
                 description = "Auto-start on boot, WakeLock, and foreground service",
                 onClick = { onNavigateTo(SettingsSubScreen.Android) }
             )
-            SettingsMenuRow(
-                icon = Icons.Outlined.Tune,
-                title = "Liquid Glass Lab",
-                description = "Tune blur, refraction, highlights, and control defaults",
-                onClick = { onNavigateTo(SettingsSubScreen.LiquidGlassLab) }
-            )
+
             SettingsMenuRow(
                 icon = Icons.Outlined.Info,
                 title = "Info & About",
@@ -451,6 +447,56 @@ fun SettingsSliderRow(
                 onValueChange = onValueChange,
                 valueRange = valueRange,
                 modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+fun SettingsClickRow(
+    title: String,
+    onClick: () -> Unit,
+    description: String? = null
+) {
+    val triggerHaptic = rememberGlobalHapticFeedback()
+    ThemedCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 16.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    triggerHaptic()
+                    onClick()
+                }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (description != null) {
+                    Text(
+                        text = description,
+                        color = MutedText,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MutedText,
+                modifier = Modifier.size(20.dp)
             )
         }
     }

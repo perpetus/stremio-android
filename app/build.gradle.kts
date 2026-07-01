@@ -5,6 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
+    id("com.google.firebase.firebase-perf")
 }
 
 fun stringPropertyOrEnv(name: String): String? =
@@ -40,6 +41,13 @@ android {
     namespace = "com.stremio.mobile"
     compileSdk = 37
     ndkVersion = "29.0.13846066"
+
+    packaging {
+        resources {
+            excludes.add("google/protobuf/**")
+            excludes.add("META-INF/gradle/incremental.annotation.processors")
+        }
+    }
 
     defaultConfig {
         applicationId = "com.stremio.mobile"
@@ -144,6 +152,7 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.15.0"))
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-perf")
     implementation("com.posthog:posthog-android:3.51.0")
     testImplementation("junit:junit:4.13.2")
 }

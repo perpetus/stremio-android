@@ -190,42 +190,6 @@ private fun SettingsLinkRow(
     }
 }
 
-@Composable
-private fun SettingsClickRow(
-    title: String,
-    onClick: () -> Unit
-) {
-    val triggerHaptic = rememberGlobalHapticFeedback()
-    ThemedCard(
-        modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 16.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    triggerHaptic()
-                    onClick()
-                }
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MutedText,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
 
 @Composable
 fun PrivacyPolicyDialog(onDismiss: () -> Unit) {

@@ -18,6 +18,8 @@ import com.stremio.mobile.player.PlayerEngine
 @Composable
 fun PlayerSettingsScreen(
     settings: com.stremio.core.types.profile.Profile.Settings?,
+    playerUiStyle: String,
+    onSetPlayerUiStyle: (String) -> Unit,
     onUpdateSettings: (com.stremio.core.types.profile.Profile.Settings) -> Unit,
     onBack: () -> Unit
 ) {
@@ -72,12 +74,26 @@ fun PlayerSettingsScreen(
                 PlayerEngine.MPV.profileValue to "MPV",
             )
 
+            val playerUiStyles = listOf(
+                "global" to "Follow Global Theme",
+                "classic" to "Classic",
+                "modern" to "Modern (Liquid Glass)",
+            )
+
             SettingsDropdownRow(
                 title = "Internal Player",
                 selectedValue = PlayerEngine.fromProfileValue(settings.playerType).profileValue,
                 options = playerEngines,
                 onSelect = { onUpdateSettings(settings.copy(playerType = it)) },
                 description = "Applies to the next stream."
+            )
+
+            SettingsDropdownRow(
+                title = "Player UI Style",
+                selectedValue = playerUiStyle,
+                options = playerUiStyles,
+                onSelect = onSetPlayerUiStyle,
+                description = "Choose the theme style specifically for the video player"
             )
 
             Text(

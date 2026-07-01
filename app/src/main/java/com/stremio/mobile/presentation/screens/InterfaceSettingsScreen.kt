@@ -16,7 +16,6 @@ import com.stremio.mobile.core.theme.MutedText
 fun InterfaceSettingsScreen(
     settings: com.stremio.core.types.profile.Profile.Settings?,
     globalUiStyle: String,
-    playerUiStyle: String,
     glassEffectsMode: String,
     globalGlassAlpha: Float,
     adaptiveGlassContrast: Boolean,
@@ -25,13 +24,13 @@ fun InterfaceSettingsScreen(
     selectedFont: AppFont,
     onUpdateSettings: (com.stremio.core.types.profile.Profile.Settings) -> Unit,
     onSetGlobalUiStyle: (String) -> Unit,
-    onSetPlayerUiStyle: (String) -> Unit,
     onSetGlassEffectsMode: (String) -> Unit,
     onSetGlobalGlassAlpha: (Float) -> Unit,
     onSetAdaptiveGlassContrastEnabled: (Boolean) -> Unit,
     onSetGlassHapticsEnabled: (Boolean) -> Unit,
     onSetHapticsIntensity: (String) -> Unit,
     onSetSelectedFont: (AppFont) -> Unit,
+    onNavigateToLiquidGlassLab: () -> Unit,
     onBack: () -> Unit
 ) {
     Column(
@@ -53,11 +52,6 @@ fun InterfaceSettingsScreen(
                 "zho" to "Chinese"
             )
             val uiStyles = listOf(
-                "classic" to "Classic",
-                "modern" to "Modern (Liquid Glass)",
-            )
-            val playerUiStyles = listOf(
-                "global" to "Follow Global Theme",
                 "classic" to "Classic",
                 "modern" to "Modern (Liquid Glass)",
             )
@@ -85,14 +79,6 @@ fun InterfaceSettingsScreen(
                 selectedValue = globalUiStyle,
                 options = uiStyles,
                 onSelect = onSetGlobalUiStyle,
-            )
-
-            SettingsDropdownRow(
-                title = "Player UI Style",
-                selectedValue = playerUiStyle,
-                options = playerUiStyles,
-                onSelect = onSetPlayerUiStyle,
-                description = "Choose the theme style specifically for the video player"
             )
 
             val fonts = AppFont.entries.map { it to it.displayName }
@@ -142,6 +128,12 @@ fun InterfaceSettingsScreen(
                     onSelect = onSetHapticsIntensity
                 )
             }
+
+            SettingsClickRow(
+                title = "Liquid Glass Lab",
+                onClick = onNavigateToLiquidGlassLab,
+                description = "Fine-tune blur, refraction, highlights, and custom values"
+            )
 
             Text(
                 text = "INTERFACE",

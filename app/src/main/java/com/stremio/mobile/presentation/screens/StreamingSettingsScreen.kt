@@ -30,17 +30,12 @@ import com.stremio.mobile.server.StreamingServerState
 @Composable
 fun StreamingSettingsScreen(
     serverState: StreamingServerState,
-    serverPingStatus: String,
-    isPingLoading: Boolean,
     serverSettings: com.stremio.core.models.StreamingServer.Settings?,
     isSeedingEnabled: Boolean,
     minSeedsThreshold: Int,
     minDownloadSpeedBps: Long,
     preferredQuality: String,
     isAutoSwitchOnDeadStream: Boolean,
-    onStartServer: () -> Unit,
-    onStopServer: () -> Unit,
-    onCheckServer: () -> Unit,
     onUpdateServerSettings: (com.stremio.core.models.StreamingServer.Settings) -> Unit,
     onSetSeedingEnabled: (Boolean) -> Unit,
     onSetMinSeedsThreshold: (Int) -> Unit,
@@ -110,74 +105,6 @@ fun StreamingSettingsScreen(
                         color = MutedText,
                         fontSize = 12.sp,
                     )
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Connection: ",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                    )
-                    val pingColor = when (serverPingStatus) {
-                        "Online" -> Color(0xFF4CAF50)
-                        "Checking..." -> Color(0xFFFFC107)
-                        "Not checked", "Server is not started" -> MutedText
-                        else -> Color(0xFFF44336)
-                    }
-                    Text(
-                        text = serverPingStatus,
-                        color = pingColor,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    val buttonText = when (serverState) {
-                        is StreamingServerState.Ready, is StreamingServerState.Starting -> "Stop Server"
-                        else -> "Start Server"
-                    }
-                    val buttonAction = when (serverState) {
-                        is StreamingServerState.Ready, is StreamingServerState.Starting -> onStopServer
-                        else -> onStartServer
-                    }
-                    val buttonColor = when (serverState) {
-                        is StreamingServerState.Ready, is StreamingServerState.Starting -> Color(0xFFD32F2F)
-                        else -> AccentPurple
-                    }
-
-                    ThemedButton(
-                        text = buttonText,
-                        onClick = buttonAction,
-                        modifier = Modifier.weight(1f),
-                        containerColor = buttonColor,
-                    )
-
-                    ThemedButton(
-                        onClick = onCheckServer,
-                        enabled = serverState is StreamingServerState.Ready,
-                        modifier = Modifier.weight(1f),
-                        containerColor = Color(0xFF2E2E3E),
-                    ) {
-                        if (isPingLoading) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(
-                                text = "Test Connection",
-                                color = if (serverState is StreamingServerState.Ready) Color.White else MutedText
-                            )
-                        }
-                    }
                 }
             }
         }
