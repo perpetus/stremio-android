@@ -26,6 +26,7 @@ import com.stremio.mobile.core.theme.MutedText
 import com.stremio.mobile.presentation.components.ThemedButton
 import com.stremio.mobile.presentation.components.ThemedCard
 import com.stremio.mobile.server.StreamingServerState
+import com.stremio.mobile.server.formatServerErrorMessage
 
 @Composable
 fun StreamingSettingsScreen(
@@ -90,7 +91,7 @@ fun StreamingSettingsScreen(
                         is StreamingServerState.Ready -> "Running"
                         is StreamingServerState.Starting -> "Starting..."
                         is StreamingServerState.Stopped -> "Stopped"
-                        is StreamingServerState.Failed -> "Failed: ${serverState.message}"
+                        is StreamingServerState.Failed -> "Failed: ${formatServerErrorMessage(serverState.message)}"
                     }
                     Text(
                         text = "Status: $statusText",

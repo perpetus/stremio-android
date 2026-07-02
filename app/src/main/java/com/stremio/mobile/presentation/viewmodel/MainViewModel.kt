@@ -24,6 +24,7 @@ import timber.log.Timber
 import com.stremio.mobile.presentation.state.*
 import com.stremio.mobile.server.StreamingServerController
 import com.stremio.mobile.server.StreamingServerState
+import com.stremio.mobile.server.formatServerErrorMessage
 import com.stremio.mobile.update.ApkInstaller
 import com.stremio.mobile.update.UpdateInfo
 import com.stremio.mobile.update.UpdateRepository
@@ -291,7 +292,7 @@ class MainViewModel(
         observeCoreAuth()
         observeStreamingServer()
         restoreCoreSession()
-        maybeAutoCheckForUpdates()
+        checkForUpdates(manual = true)
 
         startServer() // Always start the streaming server on app startup
 
@@ -312,6 +313,12 @@ class MainViewModel(
                     authInFlight = false
                     authRepository.saveAuthKeyAndEmail(accountState.authKey, accountState.email ?: "")
                     refreshLibrary()
+                    val email = accountState.email
+                    if (!email.isNullOrBlank()) {
+                        val hashedEmail = sha256(email)
+                        com.posthog.PostHog.identify(hashedEmail)
+                        com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().setUserId(hashedEmail)
+                    }
                 }
             }
         }
@@ -322,6 +329,9 @@ class MainViewModel(
         }
         viewModelScope.launch {
             authRepository.getTraktAuthFlow().collect { traktAuth ->
+                if (traktAuth && !isTraktAuthenticated.value) {
+                    com.posthog.PostHog.capture(event = "Trakt Authenticated")
+                }
                 isTraktAuthenticated.value = traktAuth
             }
         }
@@ -348,6 +358,21 @@ class MainViewModel(
         }
         viewModelScope.launch {
             serverController.state.collect { state ->
+                val stateName = when (state) {
+                    is StreamingServerState.Ready -> "Ready"
+                    is StreamingServerState.Failed -> "Failed"
+                    StreamingServerState.Starting -> "Starting"
+                    StreamingServerState.Stopped -> "Stopped"
+                }
+                com.posthog.PostHog.capture(
+                    event = "Streaming Server State Changed",
+                    properties = mapOf("new_state" to stateName)
+                )
+                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().setCustomKey("server_state", stateName)
+                if (state is StreamingServerState.Failed) {
+                    com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().setCustomKey("server_error", formatServerErrorMessage(state.message))
+                }
+
                 if (state is StreamingServerState.Ready) {
                     fetchStreamingServerSettingsDirectly()
                 }
@@ -419,6 +444,71 @@ class MainViewModel(
     }
 
     fun updateProfileSettings(newSettings: com.stremio.core.types.profile.Profile.Settings) {
+        val oldSettings = profileSettings.value
+        if (oldSettings != null) {
+            val changes = mutableMapOf<String, Any>()
+            if (oldSettings.playerType != newSettings.playerType) {
+                changes["playerType"] = newSettings.playerType ?: ""
+            }
+            if (oldSettings.subtitlesAutoSelect != newSettings.subtitlesAutoSelect) {
+                changes["subtitlesAutoSelect"] = newSettings.subtitlesAutoSelect
+            }
+            if (oldSettings.subtitlesLanguage != newSettings.subtitlesLanguage) {
+                changes["subtitlesLanguage"] = newSettings.subtitlesLanguage ?: ""
+            }
+            if (oldSettings.subtitlesSize != newSettings.subtitlesSize) {
+                changes["subtitlesSize"] = newSettings.subtitlesSize
+            }
+            if (oldSettings.subtitlesTextColor != newSettings.subtitlesTextColor) {
+                changes["subtitlesTextColor"] = newSettings.subtitlesTextColor
+            }
+            if (oldSettings.subtitlesBackgroundColor != newSettings.subtitlesBackgroundColor) {
+                changes["subtitlesBackgroundColor"] = newSettings.subtitlesBackgroundColor
+            }
+            if (oldSettings.subtitlesOutlineColor != newSettings.subtitlesOutlineColor) {
+                changes["subtitlesOutlineColor"] = newSettings.subtitlesOutlineColor
+            }
+            if (oldSettings.assSubtitlesStyling != newSettings.assSubtitlesStyling) {
+                changes["assSubtitlesStyling"] = newSettings.assSubtitlesStyling
+            }
+            if (oldSettings.audioLanguage != newSettings.audioLanguage) {
+                changes["audioLanguage"] = newSettings.audioLanguage ?: ""
+            }
+            if (oldSettings.audioPassthrough != newSettings.audioPassthrough) {
+                changes["audioPassthrough"] = newSettings.audioPassthrough
+            }
+            if (oldSettings.surroundSound != newSettings.surroundSound) {
+                changes["surroundSound"] = newSettings.surroundSound
+            }
+            if (oldSettings.playInBackground != newSettings.playInBackground) {
+                changes["playInBackground"] = newSettings.playInBackground
+            }
+            if (oldSettings.hardwareDecoding != newSettings.hardwareDecoding) {
+                changes["hardwareDecoding"] = newSettings.hardwareDecoding
+            }
+            if (oldSettings.frameRateMatchingStrategy != newSettings.frameRateMatchingStrategy) {
+                changes["frameRateMatchingStrategy"] = newSettings.frameRateMatchingStrategy.name ?: ""
+            }
+            if (oldSettings.seekTimeDuration != newSettings.seekTimeDuration) {
+                changes["seekTimeDuration"] = newSettings.seekTimeDuration
+            }
+            if (oldSettings.bingeWatching != newSettings.bingeWatching) {
+                changes["bingeWatching"] = newSettings.bingeWatching
+            }
+            if (oldSettings.nextVideoNotificationDuration != newSettings.nextVideoNotificationDuration) {
+                changes["nextVideoNotificationDuration"] = newSettings.nextVideoNotificationDuration
+            }
+
+            for ((key, value) in changes) {
+                com.posthog.PostHog.capture(
+                    event = "Setting Changed",
+                    properties = mapOf(
+                        "setting_name" to key,
+                        "new_value" to value
+                    )
+                )
+            }
+        }
         viewModelScope.launch {
             authRepository.updateSettings(newSettings)
         }
@@ -567,12 +657,25 @@ class MainViewModel(
                 if (System.currentTimeMillis() - lastCheckMs < UPDATE_CHECK_INTERVAL_MS) return@launch
             }
 
+            com.posthog.PostHog.capture(
+                event = "Update Check Started",
+                properties = mapOf("manual" to manual)
+            )
+
             _updateState.value = UpdateState.Checking
             when (val result = runCatching { updateRepository.check() }.getOrElse { error ->
                 UpdateState.Error(error.message ?: "Update check failed.")
             }) {
                 is UpdateState.Available -> {
                     authRepository.setLastUpdateCheckMs(System.currentTimeMillis())
+                    com.posthog.PostHog.capture(
+                        event = "Update Check Finished",
+                        properties = mapOf(
+                            "status" to "Available",
+                            "version" to result.info.tagName,
+                            "manual" to manual
+                        )
+                    )
                     if (!manual && authRepository.getIgnoredUpdateVersion() == result.info.tagName) {
                         _updateState.value = UpdateState.Idle
                     } else {
@@ -581,9 +684,24 @@ class MainViewModel(
                 }
                 is UpdateState.UpToDate -> {
                     authRepository.setLastUpdateCheckMs(System.currentTimeMillis())
+                    com.posthog.PostHog.capture(
+                        event = "Update Check Finished",
+                        properties = mapOf(
+                            "status" to "UpToDate",
+                            "manual" to manual
+                        )
+                    )
                     _updateState.value = result
                 }
                 is UpdateState.Error -> {
+                    com.posthog.PostHog.capture(
+                        event = "Update Check Finished",
+                        properties = mapOf(
+                            "status" to "Error",
+                            "error_message" to result.message,
+                            "manual" to manual
+                        )
+                    )
                     if (manual) {
                         _updateState.value = result
                     } else {
@@ -631,6 +749,10 @@ class MainViewModel(
 
     fun ignoreUpdate(tagName: String) {
         authRepository.setIgnoredUpdateVersion(tagName)
+        _updateState.value = UpdateState.Idle
+    }
+
+    fun dismissUpdateDialog() {
         _updateState.value = UpdateState.Idle
     }
 
@@ -728,12 +850,14 @@ class MainViewModel(
         viewModelScope.launch {
             authRepository.logoutTrakt()
         }
+        com.posthog.PostHog.capture(event = "Trakt Logged Out")
     }
 
     fun installTraktAddon() {
         viewModelScope.launch {
             authRepository.installTraktAddon()
         }
+        com.posthog.PostHog.capture(event = "Trakt Addon Installed")
     }
 
     private fun restoreCoreSession() {
@@ -1223,26 +1347,49 @@ class MainViewModel(
         subtitleObserverJob?.cancel()
         streams.value = streams.value.copy(isResolving = true, error = null)
         playJob = viewModelScope.launch {
+            val engine = PlayerEngine.fromProfileValue(profileSettings.value?.playerType)
             if (streamRequiresLocalServer(option)) {
                 runCatching { startServerInternal() }
                     .onFailure { error ->
+                        val errorMsg = "Streaming server failed to start: ${error.message ?: "Unknown error"}"
+                        com.posthog.PostHog.capture(
+                            event = "Stream Playback Failed",
+                            properties = mapOf(
+                                "player_engine" to engine.name,
+                                "error_message" to errorMsg
+                            )
+                        )
                         streams.value = streams.value.copy(
                             isResolving = false,
-                            error = "Streaming server failed to start: ${error.message ?: "Unknown error"}",
+                            error = errorMsg,
                         )
                         return@launch
                     }
             }
-            val engine = PlayerEngine.fromProfileValue(profileSettings.value?.playerType)
             val loaded = playbackRepository.resolveAndLoadStream(
                 option = option,
                 engine = engine,
                 displayTitle = playbackDisplayTitle(),
             )
             if (!loaded) {
+                com.posthog.PostHog.capture(
+                    event = "Stream Playback Failed",
+                    properties = mapOf(
+                        "player_engine" to engine.name,
+                        "error_message" to "Could not resolve a playable stream."
+                    )
+                )
                 streams.value = streams.value.copy(isResolving = false, error = "Could not resolve a playable stream.")
                 return@launch
             }
+            com.posthog.PostHog.capture(
+                event = "Stream Playback Started",
+                properties = mapOf(
+                    "stream_type" to option.addonTitle,
+                    "player_engine" to engine.name,
+                    "is_resolving" to streamRequiresLocalServer(option)
+                )
+            )
             rememberLocalStreamSelection(option)
             lastPlayedOption = option
             nextVideo.value = null
@@ -1476,7 +1623,7 @@ class MainViewModel(
 
     fun startServer() {
         viewModelScope.launch {
-            startServerInternal()
+            runCatching { startServerInternal() }
         }
     }
 
@@ -1609,6 +1756,13 @@ class MainViewModel(
                     error = if (searchShelves.value.isEmpty()) "No results for \"$trimmed\"." else null,
                 )
             }
+            com.posthog.PostHog.capture(
+                event = "Content Searched",
+                properties = mapOf(
+                    "query_length" to trimmed.length,
+                    "has_results" to searchResults.value.items.isNotEmpty()
+                )
+            )
         }
     }
 
@@ -1701,8 +1855,22 @@ class MainViewModel(
         val inLibrary = library.value.items.any { it.id == item.id && it.type == item.type }
         if (inLibrary) {
             catalogRepository.removeFromLibrary(item.id)
+            com.posthog.PostHog.capture(
+                event = "Library Item Removed",
+                properties = mapOf(
+                    "item_type" to item.type,
+                    "hashed_item_id" to sha256(item.id)
+                )
+            )
         } else {
             catalogRepository.addToLibrary(item)
+            com.posthog.PostHog.capture(
+                event = "Library Item Added",
+                properties = mapOf(
+                    "item_type" to item.type,
+                    "hashed_item_id" to sha256(item.id)
+                )
+            )
         }
     }
 
@@ -1725,14 +1893,41 @@ class MainViewModel(
 
     fun installAddon(item: AddonItem) {
         addonRepository.installAddon(item)
+        com.posthog.PostHog.capture(
+            event = "Addon Installed",
+            properties = mapOf(
+                "addon_id" to sha256(item.id),
+                "addon_name" to item.name,
+                "addon_version" to (item.version ?: "unknown"),
+                "official" to item.official
+            )
+        )
     }
 
     fun uninstallAddon(item: AddonItem) {
         addonRepository.uninstallAddon(item)
+        com.posthog.PostHog.capture(
+            event = "Addon Uninstalled",
+            properties = mapOf(
+                "addon_id" to sha256(item.id),
+                "addon_name" to item.name,
+                "addon_version" to (item.version ?: "unknown"),
+                "official" to item.official
+            )
+        )
     }
 
     fun upgradeAddon(item: AddonItem) {
         addonRepository.upgradeAddon(item)
+        com.posthog.PostHog.capture(
+            event = "Addon Upgraded",
+            properties = mapOf(
+                "addon_id" to sha256(item.id),
+                "addon_name" to item.name,
+                "addon_version" to (item.version ?: "unknown"),
+                "official" to item.official
+            )
+        )
     }
 
     fun openAddonDetails(transportUrl: String) {
@@ -1751,11 +1946,20 @@ class MainViewModel(
         selectedAddonDetails.value = null
     }
 
-    /** Validates a pasted manifest URL, then opens its details sheet so the user confirms Install there. */
     fun installAddonByUrl(rawUrl: String): Boolean {
         val url = rawUrl.trim()
         if (!url.startsWith("http://") && !url.startsWith("https://")) return false
-        return runCatching { URL(url) }.onSuccess { openAddonDetails(url) }.isSuccess
+        val isUrl = runCatching { URL(url) }.isSuccess
+        if (isUrl) {
+            com.posthog.PostHog.capture(
+                event = "Custom Addon Detail Opened",
+                properties = mapOf(
+                    "hashed_url" to sha256(url)
+                )
+            )
+            openAddonDetails(url)
+        }
+        return isUrl
     }
 
     fun login(email: String, password: String) {
@@ -1796,6 +2000,8 @@ class MainViewModel(
         authRepository.clearSavedSession()
         account.value = AccountUiState()
         refreshLibrary()
+        com.posthog.PostHog.reset()
+        com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().setUserId("")
     }
 
     fun clearAccountError() {
@@ -1883,5 +2089,11 @@ class MainViewModel(
                     null
                 }
             }
+    }
+
+    private fun sha256(input: String): String {
+        val bytes = input.lowercase().trim().toByteArray(Charsets.UTF_8)
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+        return digest.joinToString("") { "%02x".format(it) }
     }
 }

@@ -1,6 +1,10 @@
 package com.stremio.mobile.presentation.screens
 
 import android.content.Context
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import com.stremio.mobile.server.formatServerErrorMessage
+import com.stremio.mobile.server.StreamingServerState
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +19,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -72,7 +77,9 @@ import com.stremio.mobile.presentation.navigation.toSection
 import com.stremio.mobile.presentation.state.MainSection
 import com.stremio.mobile.presentation.viewmodel.MainViewModel
 import com.stremio.mobile.update.UpdateInfo
+import com.stremio.mobile.update.UpdateState
 import java.io.File
+import kotlin.math.roundToInt
 
 @Composable
 fun StremioMobileApp(viewModel: MainViewModel) {
@@ -339,6 +346,187 @@ fun StremioMobileApp(viewModel: MainViewModel) {
                     containerColor = Color(0xFF2A2935),
                     shape = RoundedCornerShape(20.dp),
                 )
+            }
+
+            if (state.server is StreamingServerState.Failed) {
+                val context = LocalContext.current
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = {
+                        (context as? Activity)?.finish()
+                    },
+                    title = {
+                        Text(
+                            text = "Streaming Server Error",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = formatServerErrorMessage((state.server as StreamingServerState.Failed).message),
+                            color = MutedText,
+                            fontSize = 14.sp
+                        )
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = viewModel::startServer
+                        ) {
+                            Text(text = "Retry", color = AccentPurple, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                (context as? Activity)?.finish()
+                            }
+                        ) {
+                            Text(text = "Exit", color = MutedText)
+                        }
+                    },
+                    containerColor = Color(0xFF2A2935),
+                    shape = RoundedCornerShape(20.dp),
+                )
+            }
+
+            when (val update = state.updateState) {
+                is UpdateState.Available -> {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = viewModel::dismissUpdateDialog,
+                        title = {
+                            Text(
+                                text = "New Update Available",
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = "Version ${update.info.versionName} is ready to install.",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = update.info.releaseNotes.ifBlank { "A new version of Stremio is available." },
+                                    color = MutedText,
+                                    fontSize = 13.sp,
+                                    lineHeight = 18.sp,
+                                    maxLines = 8,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(
+                                onClick = { viewModel.downloadAndInstallUpdate(update.info) }
+                            ) {
+                                Text(text = "Install", color = AccentPurple, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(
+                                onClick = viewModel::dismissUpdateDialog
+                            ) {
+                                Text(text = "Not Now", color = MutedText)
+                            }
+                        },
+                        containerColor = Color(0xFF2A2935),
+                        shape = RoundedCornerShape(20.dp),
+                    )
+                }
+                is UpdateState.Downloading -> {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = {},
+                        title = {
+                            Text(
+                                text = "Downloading Update...",
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(Color(0xFF1E1D26)),
+                                ) {
+                                    val progress = update.progress?.coerceIn(0f, 1f) ?: 0f
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(progress)
+                                            .height(8.dp)
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .background(AccentPurple),
+                                    )
+                                }
+                                Text(
+                                    text = if (update.progress != null) {
+                                        "${(update.progress * 100f).roundToInt()}%"
+                                    } else {
+                                        "${update.bytesRead / (1024L * 1024L)} MB downloaded"
+                                    },
+                                    color = MutedText,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        },
+                        confirmButton = {},
+                        containerColor = Color(0xFF2A2935),
+                        shape = RoundedCornerShape(20.dp),
+                    )
+                }
+                is UpdateState.ReadyToInstall -> {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = viewModel::dismissUpdateDialog,
+                        title = {
+                            Text(
+                                text = "Ready to Install",
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = if (update.needsUnknownSourcesPermission) {
+                                    "Please allow installs from this source, then return and tap Install."
+                                } else {
+                                    "The update has been downloaded. Press Install to launch the system installer."
+                                },
+                                color = MutedText,
+                                fontSize = 14.sp
+                            )
+                        },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(
+                                onClick = { viewModel.installDownloadedUpdate(update.file) }
+                            ) {
+                                Text(text = "Install", color = AccentPurple, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(
+                                onClick = viewModel::dismissUpdateDialog
+                            ) {
+                                Text(text = "Later", color = MutedText)
+                            }
+                        },
+                        containerColor = Color(0xFF2A2935),
+                        shape = RoundedCornerShape(20.dp),
+                    )
+                }
+                else -> Unit
             }
 
             if (isPlayerOpen) {
